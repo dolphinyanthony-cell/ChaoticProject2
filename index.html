@@ -2,306 +2,318 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Top Down Shooter</title>
+<title>Shooter w/ Music</title>
 <style>
-body {
-    margin: 0;
-    overflow: hidden;
-    background: #0b0b0b;
-    font-family: Arial;
-}
-
-canvas {
-    display: block;
-    background: #111;
-}
-
+body { margin:0; overflow:hidden; background:#0b0b0b; }
+canvas { display:block; }
 #ui {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    color: white;
-    font-size: 18px;
+    position:absolute;
+    top:10px;
+    left:10px;
+    color:white;
+    font-family:Arial;
 }
-
 #gameOver {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.85);
-    display: none;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
-    color: white;
+    position:absolute;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,0.85);
+    display:none;
+    justify-content:center;
+    align-items:center;
+    flex-direction:column;
+    color:white;
 }
-
-button {
-    padding: 10px 20px;
-    font-size: 18px;
-    margin-top: 10px;
-}
+button { padding:10px 20px; font-size:18px; }
 </style>
 </head>
 
 <body>
 
 <canvas id="gameCanvas"></canvas>
-
 <div id="ui">Score: 0</div>
 
 <div id="gameOver">
-    <h1 id="finalText">Game Over</h1>
+    <h1 id="finalText"></h1>
     <button onclick="restart()">Restart</button>
 </div>
 
 <script>
-/* ===============================
-   SETUP
-================================= */
+/* =========================
+   CANVAS
+========================= */
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-let keys = {};
-let mouse = { x: 0, y: 0, down: false };
+/* =========================
+   AUDIO ENGINE
+========================= */
+let audioStarted = false;
+let audioCtx;
 
+function startAudio() {
+    if (audioStarted) return;
+
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioStarted = true;
+
+    startMusic();
+}
+
+/* =========================
+   SOUND HELPERS
+========================= */
+function playOsc(freq, type, duration, gainVal) {
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+
+    osc.type = type;
+    osc.frequency.value = freq;
+
+    gain.gain.value = gainVal;
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start();
+
+    gain.gain.exponentialRampToValueAtTime(
+        0.001,
+        audioCtx.currentTime + duration
+    );
+
+    osc.stop(audioCtx.currentTime + duration);
+}
+
+/* =========================
+   SOUND EFFECTS
+========================= */
+function shootSound() {
+    if (!audioStarted) return;
+
+    playOsc(400, "square", 0.08, 0.2);
+    playOsc(200, "sawtooth", 0.1, 0.1);
+}
+
+function hitSound() {
+    if (!audioStarted) return;
+
+    playOsc(120, "sawtooth", 0.2, 0.3);
+    playOsc(80, "triangle", 0.25, 0.2);
+}
+
+/* =========================
+   MUSIC SYSTEM
+========================= */
+let beat = 0;
+
+function startMusic() {
+    setInterval(() => {
+        if (!gameRunning) return;
+
+        playDrums();
+        playBass();
+        playLead();
+
+        beat++;
+    }, 200);
+}
+
+/* =========================
+   DRUMS
+========================= */
+function playDrums() {
+    // Kick
+    if (beat % 4 === 0) {
+        playOsc(100, "sine", 0.1, 0.4);
+    }
+
+    // Snare
+    if (beat % 4 === 2) {
+        playOsc(300, "triangle", 0.05, 0.2);
+    }
+}
+
+/* =========================
+   BASS
+========================= */
+function playBass() {
+    let notes = [60, 55, 50, 45];
+    let note = notes[beat % notes.length];
+
+    let freq = 440 * Math.pow(2, (note - 69) / 12);
+
+    playOsc(freq, "sawtooth", 0.18, 0.15);
+}
+
+/* =========================
+   LEAD
+========================= */
+function playLead() {
+    let scale = [72, 74, 76, 79, 81, 84];
+    let note = scale[Math.floor(Math.random() * scale.length)];
+
+    let freq = 440 * Math.pow(2, (note - 69) / 12);
+
+    playOsc(freq, "triangle", 0.12, 0.1);
+}
+
+/* =========================
+   GAME VARIABLES
+========================= */
+let keys = {};
+let mouse = { x:0, y:0, down:false };
+
+let player = { x:canvas.width/2, y:canvas.height/2, r:15, speed:4 };
+let bullets = [];
+let enemies = [];
 let score = 0;
 let gameRunning = true;
 
-/* ===============================
-   PLAYER
-================================= */
-const player = {
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    radius: 15,
-    speed: 4,
-    hp: 100
-};
-
-/* ===============================
-   BULLETS
-================================= */
-let bullets = [];
-
-function shoot() {
-    let angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
-
-    bullets.push({
-        x: player.x,
-        y: player.y,
-        dx: Math.cos(angle) * 10,
-        dy: Math.sin(angle) * 10,
-        radius: 4
-    });
-}
-
-/* ===============================
-   ENEMIES
-================================= */
-let enemies = [];
-
-function spawnEnemy() {
-    let side = Math.floor(Math.random() * 4);
-    let x, y;
-
-    if (side === 0) { x = 0; y = Math.random() * canvas.height; }
-    if (side === 1) { x = canvas.width; y = Math.random() * canvas.height; }
-    if (side === 2) { x = Math.random() * canvas.width; y = 0; }
-    if (side === 3) { x = Math.random() * canvas.width; y = canvas.height; }
-
-    enemies.push({
-        x,
-        y,
-        radius: 15,
-        speed: 1 + Math.random() * 1.5
-    });
-}
-
-/* ===============================
+/* =========================
    INPUT
-================================= */
-document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+========================= */
+document.addEventListener("click", startAudio);
+document.addEventListener("keydown", e => keys[e.key]=true);
+document.addEventListener("keyup", e => keys[e.key]=false);
 
-canvas.addEventListener("mousemove", e => {
+canvas.addEventListener("mousemove", e=>{
     mouse.x = e.clientX;
     mouse.y = e.clientY;
 });
 
-canvas.addEventListener("mousedown", () => mouse.down = true);
-canvas.addEventListener("mouseup", () => mouse.down = false);
+canvas.addEventListener("mousedown", ()=> mouse.down=true);
+canvas.addEventListener("mouseup", ()=> mouse.down=false);
 
-/* ===============================
-   UPDATE PLAYER
-================================= */
-function updatePlayer() {
-    if (keys["w"]) player.y -= player.speed;
-    if (keys["s"]) player.y += player.speed;
-    if (keys["a"]) player.x -= player.speed;
-    if (keys["d"]) player.x += player.speed;
+/* =========================
+   SHOOT
+========================= */
+function shoot() {
+    let angle = Math.atan2(mouse.y-player.y, mouse.x-player.x);
 
-    player.x = Math.max(0, Math.min(canvas.width, player.x));
-    player.y = Math.max(0, Math.min(canvas.height, player.y));
+    bullets.push({
+        x:player.x,
+        y:player.y,
+        dx:Math.cos(angle)*10,
+        dy:Math.sin(angle)*10,
+        r:4
+    });
+
+    shootSound();
 }
 
-/* ===============================
-   UPDATE BULLETS
-================================= */
-function updateBullets() {
-    for (let i = 0; i < bullets.length; i++) {
-        let b = bullets[i];
-        b.x += b.dx;
-        b.y += b.dy;
+/* =========================
+   ENEMY SPAWN
+========================= */
+function spawnEnemy() {
+    let x = Math.random()*canvas.width;
+    let y = Math.random()*canvas.height;
 
-        if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
-            bullets.splice(i, 1);
-            i--;
-        }
-    }
+    enemies.push({ x,y,r:15,speed:1+Math.random()*1.5 });
 }
 
-/* ===============================
-   UPDATE ENEMIES
-================================= */
-function updateEnemies() {
-    for (let i = 0; i < enemies.length; i++) {
-        let e = enemies[i];
+/* =========================
+   UPDATE
+========================= */
+function update() {
+    if(keys["w"]) player.y -= player.speed;
+    if(keys["s"]) player.y += player.speed;
+    if(keys["a"]) player.x -= player.speed;
+    if(keys["d"]) player.x += player.speed;
 
-        let angle = Math.atan2(player.y - e.y, player.x - e.x);
-        e.x += Math.cos(angle) * e.speed;
-        e.y += Math.sin(angle) * e.speed;
+    if(mouse.down) shoot();
 
-        // Collision with player
-        let dist = Math.hypot(player.x - e.x, player.y - e.y);
-        if (dist < player.radius + e.radius) {
-            endGame();
+    bullets.forEach((b,i)=>{
+        b.x+=b.dx;
+        b.y+=b.dy;
+        if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height){
+            bullets.splice(i,1);
         }
+    });
 
-        // Bullet collisions
-        for (let j = 0; j < bullets.length; j++) {
-            let b = bullets[j];
-            let d = Math.hypot(b.x - e.x, b.y - e.y);
+    enemies.forEach((e,i)=>{
+        let angle = Math.atan2(player.y-e.y, player.x-e.x);
+        e.x += Math.cos(angle)*e.speed;
+        e.y += Math.sin(angle)*e.speed;
 
-            if (d < e.radius + b.radius) {
-                enemies.splice(i, 1);
-                bullets.splice(j, 1);
-                score += 10;
-                i--;
-                break;
+        bullets.forEach((b,j)=>{
+            let d = Math.hypot(b.x-e.x,b.y-e.y);
+            if(d < e.r + b.r){
+                enemies.splice(i,1);
+                bullets.splice(j,1);
+                score+=10;
+                hitSound();
             }
-        }
-    }
+        });
+    });
 }
 
-/* ===============================
+/* =========================
    DRAW
-================================= */
+========================= */
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // Player
-    ctx.fillStyle = "lime";
+    ctx.fillStyle="lime";
     ctx.beginPath();
-    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+    ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
     ctx.fill();
 
-    // Bullets
-    ctx.fillStyle = "yellow";
-    bullets.forEach(b => {
+    ctx.fillStyle="yellow";
+    bullets.forEach(b=>{
         ctx.beginPath();
-        ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+        ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
         ctx.fill();
     });
 
-    // Enemies
-    ctx.fillStyle = "red";
-    enemies.forEach(e => {
+    ctx.fillStyle="red";
+    enemies.forEach(e=>{
         ctx.beginPath();
-        ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+        ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
         ctx.fill();
     });
 }
 
-/* ===============================
-   GAME LOOP
-================================= */
+/* =========================
+   LOOP
+========================= */
 let spawnTimer = 0;
 
-function gameLoop() {
-    if (!gameRunning) return;
+function loop() {
+    if(!gameRunning) return;
 
-    updatePlayer();
-    updateBullets();
-    updateEnemies();
-
-    if (mouse.down) shoot();
-
-    spawnTimer++;
-    if (spawnTimer > 40) {
-        spawnEnemy();
-        spawnTimer = 0;
-    }
-
+    update();
     draw();
 
-    document.getElementById("ui").innerText = "Score: " + score;
+    spawnTimer++;
+    if(spawnTimer>40){
+        spawnEnemy();
+        spawnTimer=0;
+    }
 
-    requestAnimationFrame(gameLoop);
+    document.getElementById("ui").innerText="Score: "+score;
+
+    requestAnimationFrame(loop);
 }
 
-/* ===============================
-   END GAME
-================================= */
-function endGame() {
-    gameRunning = false;
-    document.getElementById("gameOver").style.display = "flex";
-    document.getElementById("finalText").innerText = "Final Score: " + score;
-}
-
-/* ===============================
+/* =========================
    RESTART
-================================= */
-function restart() {
-    enemies = [];
-    bullets = [];
-    score = 0;
-    player.x = canvas.width / 2;
-    player.y = canvas.height / 2;
-    gameRunning = true;
-    document.getElementById("gameOver").style.display = "none";
-    gameLoop();
+========================= */
+function restart(){
+    bullets=[];
+    enemies=[];
+    score=0;
+    gameRunning=true;
+    document.getElementById("gameOver").style.display="none";
+    loop();
 }
 
-/* ===============================
+/* =========================
    START
-================================= */
-gameLoop();
-
-/* ===============================
-   EXTRA SYSTEMS (adds depth)
-================================= */
-function particleSystem(){return true;}
-function soundSystem(){return true;}
-function upgradeSystem(){return true;}
-function bossSystem(){return true;}
-function waveSystem(){return true;}
-function lightingSystem(){return true;}
-function minimapSystem(){return true;}
-function aiSystem(){return true;}
-function physicsSystem(){return true;}
-function uiSystem(){return true;}
-function saveSystem(){return true;}
-function loadSystem(){return true;}
-
-// Padding for large structured codebase
-for (let i = 0; i < 300; i++) {
-    console.log("Shooter Engine Layer:", i);
-}
-
+========================= */
+loop();
 </script>
 
 </body>
