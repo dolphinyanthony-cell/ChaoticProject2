@@ -45,7 +45,7 @@ button {
 <body>
 
 <canvas id="gameCanvas"></canvas>
-<div id="ui">Score: 0 | Lives: 3</div>
+<div id="ui">Score: 0 | ❤️❤️❤️</div>
 
 <div id="startScreen">
     <h1>Click Start</h1>
@@ -257,7 +257,6 @@ function update(){
             if(lives <= 0){
                 gameRunning=false;
 
-                // SAVE HIGH SCORE
                 if(score > highScore){
                     highScore = score;
                     localStorage.setItem("shooterHighScore", highScore);
@@ -331,8 +330,11 @@ function loop(){
             spawnTimer=0;
         }
 
+        // ❤️ HEART DISPLAY
+        let hearts = Array(lives).fill("❤️").join(" ");
+
         document.getElementById("ui").innerText =
-            "Score: "+score+" | Lives: "+lives;
+            "Score: " + score + " | " + hearts;
     }
 
     requestAnimationFrame(loop);
