@@ -7,7 +7,6 @@
 body { margin:0; overflow:hidden; background:#0b0b0b; }
 canvas { display:block; }
 
-/* UI */
 #ui {
     position:absolute;
     top:10px;
@@ -17,38 +16,22 @@ canvas { display:block; }
     z-index:5;
 }
 
-/* START SCREEN */
-#startScreen {
+#startScreen, #gameOver {
     position:fixed;
     top:0;
     left:0;
     width:100vw;
     height:100vh;
-    background:rgba(0,0,0,0.95);
+    background:rgba(0,0,0,0.9);
     display:flex;
     justify-content:center;
     align-items:center;
     flex-direction:column;
     color:white;
-    font-family:Arial;
     z-index:9999;
 }
 
-/* GAME OVER */
-#gameOver {
-    position:fixed;
-    top:0;
-    left:0;
-    width:100vw;
-    height:100vh;
-    background:rgba(0,0,0,0.85);
-    display:none;
-    justify-content:center;
-    align-items:center;
-    flex-direction:column;
-    color:white;
-    z-index:9999;
-}
+#gameOver { display:none; }
 
 button {
     padding:12px 24px;
@@ -62,7 +45,7 @@ button {
 <body>
 
 <canvas id="gameCanvas"></canvas>
-<div id="ui">Score: 0</div>
+<div id="ui">Score: 0 | Lives: 3</div>
 
 <div id="startScreen">
     <h1>Click Start</h1>
@@ -85,12 +68,10 @@ let audioCtx, masterGain, audioStarted=false;
 
 function startAudio(){
     if(audioStarted) return;
-
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = audioCtx.createGain();
     masterGain.gain.value = 0.4;
     masterGain.connect(audioCtx.destination);
-
     audioStarted = true;
     startMusic();
 }
@@ -180,6 +161,8 @@ let keys={}, mouse={x:0,y:0,down:false};
 let player={x:canvas.width/2,y:canvas.height/2,r:15,speed:4};
 let bullets=[], enemies=[];
 let score=0;
+let lives=3;              // NEW
+let nextLifeScore=500;    // NEW
 let gameRunning=false;
 
 /* INPUT */
@@ -202,6 +185,8 @@ function startGame(){
     bullets=[];
     enemies=[];
     score=0;
+    lives=3;               // NEW reset
+    nextLifeScore=500;     // NEW reset
     spawnTimer=0;
 
     player.x = canvas.width/2;
@@ -225,7 +210,7 @@ function shoot(){
     shootSound();
 }
 
-/* SPAWN (ONLY CHANGE: hp added) */
+/* SPAWN */
 function spawnEnemy(){
     enemies.push({
         x:Math.random()*canvas.width,
@@ -259,25 +244,35 @@ function update(){
         e.x+=Math.cos(angle)*e.speed;
         e.y+=Math.sin(angle)*e.speed;
 
+        // PLAYER HIT
         let dist=Math.hypot(player.x-e.x,player.y-e.y);
         if(dist < player.r + e.r){
-            gameRunning=false;
-            document.getElementById("gameOver").style.display="flex";
-            document.getElementById("finalText").innerText="Score: "+score;
+            enemies.splice(i,1);
+            lives--; // NEW
+
+            if(lives <= 0){
+                gameRunning=false;
+                document.getElementById("gameOver").style.display="flex";
+                document.getElementById("finalText").innerText="Score: "+score;
+            }
         }
 
         bullets.forEach((b,j)=>{
             let d=Math.hypot(b.x-e.x,b.y-e.y);
             if(d < e.r + b.r){
-
-                e.hp--; // NEW
-
+                e.hp--;
                 bullets.splice(j,1);
 
                 if(e.hp <= 0){
                     enemies.splice(i,1);
                     score+=10;
                     hitSound();
+
+                    // NEW: extra life system
+                    if(score >= nextLifeScore){
+                        lives++;
+                        nextLifeScore += 500;
+                    }
                 }
             }
         });
@@ -322,7 +317,8 @@ function loop(){
             spawnTimer=0;
         }
 
-        document.getElementById("ui").innerText="Score: "+score;
+        document.getElementById("ui").innerText =
+            "Score: "+score+" | Lives: "+lives; // UPDATED UI
     }
 
     requestAnimationFrame(loop);
