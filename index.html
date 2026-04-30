@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Shooter Final</title>
+<title>Shooter Fixed</title>
 <style>
 body { margin:0; overflow:hidden; background:#0b0b0b; }
 canvas { display:block; }
 
+/* UI */
 #ui {
     position:absolute;
     top:10px;
@@ -15,18 +16,19 @@ canvas { display:block; }
     font-family:Arial;
 }
 
-/* START + GAME OVER SCREEN */
+/* START / GAME OVER SCREEN */
 #overlay {
     position:absolute;
     width:100%;
     height:100%;
-    background:rgba(0,0,0,0.9);
+    background:rgba(0,0,0,0.85);
     display:flex;
     justify-content:center;
     align-items:center;
     flex-direction:column;
     color:white;
     font-family:Arial;
+    z-index:10;
 }
 
 button {
@@ -44,141 +46,44 @@ button {
 <div id="ui">Score: 0</div>
 
 <div id="overlay">
-    <h1 id="overlayText">Click Start</h1>
-    <button onclick="startGame()">Start</button>
+    <h1 id="overlayText">Click Start to Play</h1>
+    <button id="startBtn">Start Game</button>
 </div>
 
 <script>
 /* =========================
-   CANVAS
+   CANVAS SETUP
 ========================= */
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+
+function resize(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener("resize", resize);
 
 /* =========================
-   AUDIO
+   GAME STATE
 ========================= */
-let audioCtx, masterGain, audioStarted = false;
-
-function startAudio() {
-    if (audioStarted) return;
-
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    masterGain = audioCtx.createGain();
-    masterGain.gain.value = 0.4;
-    masterGain.connect(audioCtx.destination);
-
-    audioStarted = true;
-    startMusic();
-}
-
-/* SOUND HELPERS */
-function playTone(freq, type, duration, volume, glide=false) {
-    let osc = audioCtx.createOscillator();
-    let gain = audioCtx.createGain();
-
-    osc.type = type;
-    osc.frequency.value = freq;
-
-    if (glide) {
-        osc.frequency.exponentialRampToValueAtTime(freq * 0.6, audioCtx.currentTime + duration);
-    }
-
-    gain.gain.value = volume;
-
-    osc.connect(gain);
-    gain.connect(masterGain);
-
-    osc.start();
-    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-    osc.stop(audioCtx.currentTime + duration);
-}
-
-function createNoise(duration, volume) {
-    let buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
-    let data = buffer.getChannelData(0);
-
-    for (let i = 0; i < data.length; i++) {
-        data[i] = Math.random() * 2 - 1;
-    }
-
-    let source = audioCtx.createBufferSource();
-    let gain = audioCtx.createGain();
-
-    gain.gain.value = volume;
-
-    source.buffer = buffer;
-    source.connect(gain);
-    gain.connect(masterGain);
-
-    source.start();
-    source.stop(audioCtx.currentTime + duration);
-}
-
-/* SOUND EFFECTS */
-function shootSound() {
-    if (!audioStarted) return;
-    createNoise(0.05, 0.2);
-    playTone(600, "square", 0.08, 0.15, true);
-}
-
-function hitSound() {
-    if (!audioStarted) return;
-    createNoise(0.08, 0.25);
-    playTone(120, "triangle", 0.15, 0.2, true);
-}
+let gameRunning = false;
+let started = false;
 
 /* =========================
-   MUSIC
+   PLAYER
 ========================= */
-let step = 0;
-const chords = [
-    [261.6,329.6,392],
-    [220,261.6,329.6],
-    [196,246.9,329.6],
-    [174.6,220,261.6]
-];
-
-function startMusic() {
-    setInterval(()=>{
-        if (!gameRunning) return;
-
-        let chord = chords[step % chords.length];
-
-        chord.forEach(freq=>{
-            playTone(freq,"sine",0.4,0.05);
-        });
-
-        if(step % 2 === 0){
-            playTone(chord[0]/2,"triangle",0.25,0.08);
-        }
-
-        if(Math.random()<0.5){
-            let note = chord[Math.floor(Math.random()*chord.length)]*2;
-            playTone(note,"sine",0.15,0.07);
-        }
-
-        step++;
-    },300);
-}
-
-/* =========================
-   GAME VARIABLES
-========================= */
-let keys = {};
-let mouse = {x:0,y:0,down:false};
-
-let player = {x:canvas.width/2,y:canvas.height/2,r:15,speed:4};
+let player = { x:300, y:300, r:15, speed:4 };
 let bullets = [];
 let enemies = [];
 let score = 0;
-let gameRunning = false;
 
 /* INPUT */
-document.addEventListener("keydown", e=>keys[e.key]=true);
-document.addEventListener("keyup", e=>keys[e.key]=false);
+let keys = {};
+let mouse = {x:0,y:0,down:false};
+
+document.addEventListener("keydown", e=>keys[e.key.toLowerCase()]=true);
+document.addEventListener("keyup", e=>keys[e.key.toLowerCase()]=false);
 
 canvas.addEventListener("mousemove", e=>{
     mouse.x=e.clientX;
@@ -187,13 +92,60 @@ canvas.addEventListener("mousemove", e=>{
 canvas.addEventListener("mousedown", ()=>mouse.down=true);
 canvas.addEventListener("mouseup", ()=>mouse.down=false);
 
-/* START GAME */
+/* =========================
+   AUDIO (SAFE START)
+========================= */
+let audioCtx, masterGain;
+
+function startAudio(){
+    if(audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.4;
+    masterGain.connect(audioCtx.destination);
+}
+
+/* SOUND */
+function playTone(freq,type,duration,volume){
+    if(!audioCtx) return;
+
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+
+    osc.type=type;
+    osc.frequency.value=freq;
+
+    gain.gain.value=volume;
+
+    osc.connect(gain);
+    gain.connect(masterGain);
+
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+duration);
+    osc.stop(audioCtx.currentTime+duration);
+}
+
+function shootSound(){
+    playTone(500,"square",0.07,0.2);
+}
+
+function hitSound(){
+    playTone(120,"triangle",0.15,0.3);
+}
+
+/* =========================
+   START GAME
+========================= */
+document.getElementById("startBtn").onclick = startGame;
+
 function startGame(){
     document.getElementById("overlay").style.display="none";
-    resetGame();
+
     startAudio();
+
+    resetGame();
     gameRunning = true;
-    loop();
+    started = true;
 }
 
 /* RESET */
@@ -201,13 +153,13 @@ function resetGame(){
     bullets=[];
     enemies=[];
     score=0;
-    player.x=canvas.width/2;
-    player.y=canvas.height/2;
+    player.x = canvas.width/2;
+    player.y = canvas.height/2;
 }
 
 /* SHOOT */
 function shoot(){
-    let angle=Math.atan2(mouse.y-player.y,mouse.x-player.x);
+    let angle = Math.atan2(mouse.y-player.y, mouse.x-player.x);
 
     bullets.push({
         x:player.x,
@@ -230,8 +182,12 @@ function spawnEnemy(){
     });
 }
 
-/* UPDATE */
+/* =========================
+   UPDATE
+========================= */
 function update(){
+    if(!gameRunning) return;
+
     if(keys["w"]) player.y-=player.speed;
     if(keys["s"]) player.y+=player.speed;
     if(keys["a"]) player.x-=player.speed;
@@ -240,7 +196,9 @@ function update(){
     if(mouse.down) shoot();
 
     bullets.forEach((b,i)=>{
-        b.x+=b.dx; b.y+=b.dy;
+        b.x+=b.dx;
+        b.y+=b.dy;
+
         if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height){
             bullets.splice(i,1);
         }
@@ -251,8 +209,7 @@ function update(){
         e.x+=Math.cos(angle)*e.speed;
         e.y+=Math.sin(angle)*e.speed;
 
-        // 💀 PLAYER COLLISION (NEW FIX)
-        let dist = Math.hypot(player.x - e.x, player.y - e.y);
+        let dist = Math.hypot(player.x-e.x,player.y-e.y);
         if(dist < player.r + e.r){
             gameOver();
         }
@@ -269,14 +226,17 @@ function update(){
     });
 }
 
-/* DRAW */
+/* DRAW (ALWAYS RUNS) */
 function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
+    // draw player always so screen isn't blank
     ctx.fillStyle="lime";
     ctx.beginPath();
     ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
     ctx.fill();
+
+    if(!started) return;
 
     ctx.fillStyle="yellow";
     bullets.forEach(b=>{
@@ -297,18 +257,18 @@ function draw(){
 let spawnTimer=0;
 
 function loop(){
-    if(!gameRunning) return;
-
     update();
     draw();
 
-    spawnTimer++;
-    if(spawnTimer>50){
-        spawnEnemy();
-        spawnTimer=0;
-    }
+    if(gameRunning){
+        spawnTimer++;
+        if(spawnTimer>50){
+            spawnEnemy();
+            spawnTimer=0;
+        }
 
-    document.getElementById("ui").innerText="Score: "+score;
+        document.getElementById("ui").innerText="Score: "+score;
+    }
 
     requestAnimationFrame(loop);
 }
@@ -316,9 +276,16 @@ function loop(){
 /* GAME OVER */
 function gameOver(){
     gameRunning=false;
-    document.getElementById("overlay").style.display="flex";
-    document.getElementById("overlayText").innerText="Game Over - Score: "+score;
+
+    let overlay = document.getElementById("overlay");
+    overlay.style.display="flex";
+
+    document.getElementById("overlayText").innerText =
+        "Game Over - Score: " + score;
 }
+
+/* START LOOP ALWAYS */
+loop();
 </script>
 
 </body>
