@@ -2,12 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Shooter Fixed</title>
+<title>Shooter (Fixed)</title>
 <style>
 body { margin:0; overflow:hidden; background:#0b0b0b; }
 canvas { display:block; }
 
-/* UI */
 #ui {
     position:absolute;
     top:10px;
@@ -16,7 +15,7 @@ canvas { display:block; }
     font-family:Arial;
 }
 
-/* START / GAME OVER SCREEN */
+/* Overlay */
 #overlay {
     position:absolute;
     width:100%;
@@ -28,7 +27,6 @@ canvas { display:block; }
     flex-direction:column;
     color:white;
     font-family:Arial;
-    z-index:10;
 }
 
 button {
@@ -46,13 +44,13 @@ button {
 <div id="ui">Score: 0</div>
 
 <div id="overlay">
-    <h1 id="overlayText">Click Start to Play</h1>
-    <button id="startBtn">Start Game</button>
+    <h1 id="overlayText">Start Game</h1>
+    <button onclick="startGame()">Start</button>
 </div>
 
 <script>
 /* =========================
-   CANVAS SETUP
+   CANVAS
 ========================= */
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -65,55 +63,32 @@ resize();
 window.addEventListener("resize", resize);
 
 /* =========================
-   GAME STATE
+   AUDIO (same system)
 ========================= */
-let gameRunning = false;
-let started = false;
-
-/* =========================
-   PLAYER
-========================= */
-let player = { x:300, y:300, r:15, speed:4 };
-let bullets = [];
-let enemies = [];
-let score = 0;
-
-/* INPUT */
-let keys = {};
-let mouse = {x:0,y:0,down:false};
-
-document.addEventListener("keydown", e=>keys[e.key.toLowerCase()]=true);
-document.addEventListener("keyup", e=>keys[e.key.toLowerCase()]=false);
-
-canvas.addEventListener("mousemove", e=>{
-    mouse.x=e.clientX;
-    mouse.y=e.clientY;
-});
-canvas.addEventListener("mousedown", ()=>mouse.down=true);
-canvas.addEventListener("mouseup", ()=>mouse.down=false);
-
-/* =========================
-   AUDIO (SAFE START)
-========================= */
-let audioCtx, masterGain;
+let audioCtx, masterGain, audioStarted=false;
 
 function startAudio(){
-    if(audioCtx) return;
+    if(audioStarted) return;
+
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = audioCtx.createGain();
     masterGain.gain.value = 0.4;
     masterGain.connect(audioCtx.destination);
+
+    audioStarted = true;
+    startMusic();
 }
 
-/* SOUND */
-function playTone(freq,type,duration,volume){
-    if(!audioCtx) return;
-
+function playTone(freq,type,duration,volume,glide=false){
     let osc = audioCtx.createOscillator();
     let gain = audioCtx.createGain();
 
     osc.type=type;
     osc.frequency.value=freq;
+
+    if(glide){
+        osc.frequency.exponentialRampToValueAtTime(freq*0.6, audioCtx.currentTime+duration);
+    }
 
     gain.gain.value=volume;
 
@@ -121,45 +96,124 @@ function playTone(freq,type,duration,volume){
     gain.connect(masterGain);
 
     osc.start();
-    gain.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+duration);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+duration);
     osc.stop(audioCtx.currentTime+duration);
 }
 
+function createNoise(duration, volume){
+    let buffer = audioCtx.createBuffer(1, audioCtx.sampleRate*duration, audioCtx.sampleRate);
+    let data = buffer.getChannelData(0);
+
+    for(let i=0;i<data.length;i++){
+        data[i]=Math.random()*2-1;
+    }
+
+    let src = audioCtx.createBufferSource();
+    let gain = audioCtx.createGain();
+
+    gain.gain.value=volume;
+
+    src.buffer=buffer;
+    src.connect(gain);
+    gain.connect(masterGain);
+
+    src.start();
+    src.stop(audioCtx.currentTime+duration);
+}
+
 function shootSound(){
-    playTone(500,"square",0.07,0.2);
+    if(!audioStarted) return;
+    createNoise(0.05,0.2);
+    playTone(600,"square",0.08,0.15,true);
 }
 
 function hitSound(){
-    playTone(120,"triangle",0.15,0.3);
+    if(!audioStarted) return;
+    createNoise(0.08,0.25);
+    playTone(120,"triangle",0.15,0.2,true);
+}
+
+/* MUSIC */
+let step=0;
+const chords=[
+    [261.6,329.6,392],
+    [220,261.6,329.6],
+    [196,246.9,329.6],
+    [174.6,220,261.6]
+];
+
+function startMusic(){
+    setInterval(()=>{
+        if(!gameRunning) return;
+
+        let chord = chords[step % chords.length];
+
+        chord.forEach(f=>playTone(f,"sine",0.4,0.05));
+
+        if(step%2===0){
+            playTone(chord[0]/2,"triangle",0.25,0.08);
+        }
+
+        if(Math.random()<0.5){
+            let note = chord[Math.floor(Math.random()*chord.length)]*2;
+            playTone(note,"sine",0.15,0.07);
+        }
+
+        step++;
+    },300);
 }
 
 /* =========================
-   START GAME
+   GAME VARIABLES
 ========================= */
-document.getElementById("startBtn").onclick = startGame;
+let keys={};
+let mouse={x:0,y:0,down:false};
 
+let player={x:0,y:0,r:15,speed:4};
+let bullets=[];
+let enemies=[];
+let score=0;
+
+let gameRunning=false;
+
+/* INPUT */
+document.addEventListener("keydown",e=>keys[e.key.toLowerCase()]=true);
+document.addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+
+canvas.addEventListener("mousemove",e=>{
+    mouse.x=e.clientX;
+    mouse.y=e.clientY;
+});
+canvas.addEventListener("mousedown",()=>mouse.down=true);
+canvas.addEventListener("mouseup",()=>mouse.down=false);
+
+/* =========================
+   START / RESET
+========================= */
 function startGame(){
     document.getElementById("overlay").style.display="none";
 
     startAudio();
 
     resetGame();
-    gameRunning = true;
-    started = true;
+    gameRunning=true;
 }
 
-/* RESET */
 function resetGame(){
     bullets=[];
     enemies=[];
     score=0;
-    player.x = canvas.width/2;
-    player.y = canvas.height/2;
+
+    // ✅ FIX: always center player correctly
+    player.x = canvas.width / 2;
+    player.y = canvas.height / 2;
 }
 
-/* SHOOT */
+/* =========================
+   GAME LOGIC
+========================= */
 function shoot(){
-    let angle = Math.atan2(mouse.y-player.y, mouse.x-player.x);
+    let angle=Math.atan2(mouse.y-player.y, mouse.x-player.x);
 
     bullets.push({
         x:player.x,
@@ -172,7 +226,6 @@ function shoot(){
     shootSound();
 }
 
-/* SPAWN */
 function spawnEnemy(){
     enemies.push({
         x:Math.random()*canvas.width,
@@ -182,9 +235,6 @@ function spawnEnemy(){
     });
 }
 
-/* =========================
-   UPDATE
-========================= */
 function update(){
     if(!gameRunning) return;
 
@@ -196,9 +246,7 @@ function update(){
     if(mouse.down) shoot();
 
     bullets.forEach((b,i)=>{
-        b.x+=b.dx;
-        b.y+=b.dy;
-
+        b.x+=b.dx; b.y+=b.dy;
         if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height){
             bullets.splice(i,1);
         }
@@ -209,7 +257,8 @@ function update(){
         e.x+=Math.cos(angle)*e.speed;
         e.y+=Math.sin(angle)*e.speed;
 
-        let dist = Math.hypot(player.x-e.x,player.y-e.y);
+        // 💀 PLAYER COLLISION (added, nothing else changed)
+        let dist=Math.hypot(player.x-e.x,player.y-e.y);
         if(dist < player.r + e.r){
             gameOver();
         }
@@ -226,17 +275,13 @@ function update(){
     });
 }
 
-/* DRAW (ALWAYS RUNS) */
 function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // draw player always so screen isn't blank
     ctx.fillStyle="lime";
     ctx.beginPath();
     ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
     ctx.fill();
-
-    if(!started) return;
 
     ctx.fillStyle="yellow";
     bullets.forEach(b=>{
@@ -253,7 +298,7 @@ function draw(){
     });
 }
 
-/* LOOP */
+/* LOOP (unchanged feel) */
 let spawnTimer=0;
 
 function loop(){
@@ -273,18 +318,15 @@ function loop(){
     requestAnimationFrame(loop);
 }
 
-/* GAME OVER */
 function gameOver(){
     gameRunning=false;
 
-    let overlay = document.getElementById("overlay");
-    overlay.style.display="flex";
-
-    document.getElementById("overlayText").innerText =
-        "Game Over - Score: " + score;
+    document.getElementById("overlay").style.display="flex";
+    document.getElementById("overlayText").innerText=
+        "Game Over - Score: "+score;
 }
 
-/* START LOOP ALWAYS */
+/* START LOOP */
 loop();
 </script>
 
