@@ -17,9 +17,9 @@ canvas { display:block; }
     z-index:5;
 }
 
-/* START SCREEN (FIXED) */
+/* START SCREEN */
 #startScreen {
-    position:fixed; /* IMPORTANT FIX */
+    position:fixed;
     top:0;
     left:0;
     width:100vw;
@@ -31,7 +31,7 @@ canvas { display:block; }
     flex-direction:column;
     color:white;
     font-family:Arial;
-    z-index:9999; /* FORCE ABOVE EVERYTHING */
+    z-index:9999;
 }
 
 /* GAME OVER */
@@ -225,13 +225,14 @@ function shoot(){
     shootSound();
 }
 
-/* SPAWN */
+/* SPAWN (ONLY CHANGE: hp added) */
 function spawnEnemy(){
     enemies.push({
         x:Math.random()*canvas.width,
         y:Math.random()*canvas.height,
         r:15,
-        speed:1+Math.random()*1.5
+        speed:1+Math.random()*1.5,
+        hp:2
     });
 }
 
@@ -268,10 +269,16 @@ function update(){
         bullets.forEach((b,j)=>{
             let d=Math.hypot(b.x-e.x,b.y-e.y);
             if(d < e.r + b.r){
-                enemies.splice(i,1);
+
+                e.hp--; // NEW
+
                 bullets.splice(j,1);
-                score+=10;
-                hitSound();
+
+                if(e.hp <= 0){
+                    enemies.splice(i,1);
+                    score+=10;
+                    hitSound();
+                }
             }
         });
     });
