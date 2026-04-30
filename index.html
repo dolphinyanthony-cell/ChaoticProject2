@@ -7,33 +7,20 @@
 body { margin:0; overflow:hidden; background:#0b0b0b; }
 canvas { display:block; }
 #ui { position:absolute; top:10px; left:10px; color:white; font-family:Arial; }
-#gameOver {
+
+#gameOver, #startScreen {
     position:absolute;
     width:100%;
     height:100%;
     background:rgba(0,0,0,0.85);
-    display:none;
-    justify-content:center;
-    align-items:center;
-    flex-direction:column;
-    color:white;
-}
-button { padding:10px 20px; font-size:18px; }
-
-/* NEW: start overlay */
-#startScreen {
-    position:absolute;
-    width:100%;
-    height:100%;
-    background:rgba(0,0,0,0.9);
     display:flex;
     justify-content:center;
     align-items:center;
     flex-direction:column;
     color:white;
-    font-family:Arial;
-    z-index:10;
 }
+
+button { padding:10px 20px; font-size:18px; margin-top:10px; }
 </style>
 </head>
 
@@ -42,35 +29,28 @@ button { padding:10px 20px; font-size:18px; }
 <canvas id="gameCanvas"></canvas>
 <div id="ui">Score: 0</div>
 
-<!-- NEW: start screen -->
 <div id="startScreen">
     <h1>Click Start</h1>
     <button onclick="startGame()">Start</button>
 </div>
 
-<div id="gameOver">
+<div id="gameOver" style="display:none;">
     <h1 id="finalText"></h1>
     <button onclick="restart()">Restart</button>
 </div>
 
 <script>
-/* =========================
-   CANVAS
-========================= */
+/* CANVAS */
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-/* =========================
-   AUDIO ENGINE
-========================= */
-let audioCtx;
-let masterGain;
-let audioStarted = false;
+/* AUDIO */
+let audioCtx, masterGain, audioStarted=false;
 
-function startAudio() {
-    if (audioStarted) return;
+function startAudio(){
+    if(audioStarted) return;
 
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = audioCtx.createGain();
@@ -81,144 +61,129 @@ function startAudio() {
     startMusic();
 }
 
-/* =========================
-   NOISE GENERATOR
-========================= */
-function createNoise(duration, volume) {
-    let buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
+function createNoise(duration, volume){
+    let buffer = audioCtx.createBuffer(1, audioCtx.sampleRate*duration, audioCtx.sampleRate);
     let data = buffer.getChannelData(0);
 
-    for (let i = 0; i < data.length; i++) {
-        data[i] = Math.random() * 2 - 1;
+    for(let i=0;i<data.length;i++){
+        data[i]=Math.random()*2-1;
     }
 
-    let source = audioCtx.createBufferSource();
-    source.buffer = buffer;
-
+    let src = audioCtx.createBufferSource();
     let gain = audioCtx.createGain();
-    gain.gain.value = volume;
 
-    source.connect(gain);
+    gain.gain.value=volume;
+
+    src.buffer=buffer;
+    src.connect(gain);
     gain.connect(masterGain);
 
-    source.start();
-    source.stop(audioCtx.currentTime + duration);
+    src.start();
+    src.stop(audioCtx.currentTime+duration);
 }
 
-/* =========================
-   OSC HELPER
-========================= */
-function playTone(freq, type, duration, volume, glide=false) {
+function playTone(freq,type,duration,volume,glide=false){
     let osc = audioCtx.createOscillator();
     let gain = audioCtx.createGain();
 
-    osc.type = type;
-    osc.frequency.value = freq;
+    osc.type=type;
+    osc.frequency.value=freq;
 
-    if (glide) {
-        osc.frequency.exponentialRampToValueAtTime(freq * 0.6, audioCtx.currentTime + duration);
+    if(glide){
+        osc.frequency.exponentialRampToValueAtTime(freq*0.6, audioCtx.currentTime+duration);
     }
 
-    gain.gain.value = volume;
+    gain.gain.value=volume;
 
     osc.connect(gain);
     gain.connect(masterGain);
 
     osc.start();
-
-    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-    osc.stop(audioCtx.currentTime + duration);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+duration);
+    osc.stop(audioCtx.currentTime+duration);
 }
 
-/* =========================
-   SOUND EFFECTS
-========================= */
-function shootSound() {
-    if (!audioStarted) return;
-
-    createNoise(0.05, 0.2);
-    playTone(600, "square", 0.08, 0.15, true);
+function shootSound(){
+    if(!audioStarted) return;
+    createNoise(0.05,0.2);
+    playTone(600,"square",0.08,0.15,true);
 }
 
-function hitSound() {
-    if (!audioStarted) return;
-
-    createNoise(0.08, 0.25);
-    playTone(120, "triangle", 0.15, 0.2, true);
+function hitSound(){
+    if(!audioStarted) return;
+    createNoise(0.08,0.25);
+    playTone(120,"triangle",0.15,0.2,true);
 }
 
-/* =========================
-   MUSIC SYSTEM
-========================= */
-let step = 0;
-
-const chords = [
-    [261.6, 329.6, 392.0],
-    [220.0, 261.6, 329.6],
-    [196.0, 246.9, 329.6],
-    [174.6, 220.0, 261.6]
+/* MUSIC */
+let step=0;
+const chords=[
+    [261.6,329.6,392],
+    [220,261.6,329.6],
+    [196,246.9,329.6],
+    [174.6,220,261.6]
 ];
 
-function startMusic() {
-    setInterval(() => {
-        if (!gameRunning) return;
+function startMusic(){
+    setInterval(()=>{
+        if(!gameRunning) return;
 
-        playMusicLayer();
+        let chord = chords[step % chords.length];
+
+        chord.forEach(f=>playTone(f,"sine",0.4,0.05));
+
+        if(step%2===0){
+            playTone(chord[0]/2,"triangle",0.25,0.08);
+        }
+
+        if(Math.random()<0.5){
+            let note = chord[Math.floor(Math.random()*chord.length)]*2;
+            playTone(note,"sine",0.15,0.07);
+        }
+
         step++;
-
-    }, 300);
+    },300);
 }
 
-function playMusicLayer() {
-    let chord = chords[step % chords.length];
+/* GAME */
+let keys={}, mouse={x:0,y:0,down:false};
 
-    chord.forEach(freq => {
-        playTone(freq, "sine", 0.4, 0.05);
-    });
-
-    if (step % 2 === 0) {
-        playTone(chord[0] / 2, "triangle", 0.25, 0.08);
-    }
-
-    if (Math.random() < 0.5) {
-        let note = chord[Math.floor(Math.random() * chord.length)] * 2;
-        playTone(note, "sine", 0.15, 0.07);
-    }
-}
-
-/* =========================
-   GAME
-========================= */
-let keys = {};
-let mouse = { x:0, y:0, down:false };
-
-let player = { x:canvas.width/2, y:canvas.height/2, r:15, speed:4 };
-let bullets = [];
-let enemies = [];
-let score = 0;
-let gameRunning = false; // NEW: start paused
+let player={x:canvas.width/2,y:canvas.height/2,r:15,speed:4};
+let bullets=[], enemies=[];
+let score=0;
+let gameRunning=false;
 
 /* INPUT */
-document.addEventListener("click", startAudio);
-document.addEventListener("keydown", e => keys[e.key]=true);
-document.addEventListener("keyup", e => keys[e.key]=false);
+document.addEventListener("keydown",e=>keys[e.key]=true);
+document.addEventListener("keyup",e=>keys[e.key]=false);
 
-canvas.addEventListener("mousemove", e=>{
-    mouse.x = e.clientX;
-    mouse.y = e.clientY;
+canvas.addEventListener("mousemove",e=>{
+    mouse.x=e.clientX;
+    mouse.y=e.clientY;
 });
-canvas.addEventListener("mousedown", ()=> mouse.down=true);
-canvas.addEventListener("mouseup", ()=> mouse.down=false);
+canvas.addEventListener("mousedown",()=>mouse.down=true);
+canvas.addEventListener("mouseup",()=>mouse.down=false);
 
-/* NEW: start button */
+/* START */
 function startGame(){
     document.getElementById("startScreen").style.display="none";
-    gameRunning = true;
+
+    startAudio(); // ensures music starts
+
+    bullets=[];
+    enemies=[];
+    score=0;
+    spawnTimer=0;
+
+    player.x = canvas.width/2;
+    player.y = canvas.height/2;
+
+    gameRunning=true;
 }
 
 /* SHOOT */
-function shoot() {
-    let angle = Math.atan2(mouse.y-player.y, mouse.x-player.x);
+function shoot(){
+    let angle=Math.atan2(mouse.y-player.y, mouse.x-player.x);
 
     bullets.push({
         x:player.x,
@@ -232,7 +197,7 @@ function shoot() {
 }
 
 /* SPAWN */
-function spawnEnemy() {
+function spawnEnemy(){
     enemies.push({
         x:Math.random()*canvas.width,
         y:Math.random()*canvas.height,
@@ -242,13 +207,13 @@ function spawnEnemy() {
 }
 
 /* UPDATE */
-function update() {
-    if(!gameRunning) return; // NEW
+function update(){
+    if(!gameRunning) return;
 
-    if(keys["w"]) player.y -= player.speed;
-    if(keys["s"]) player.y += player.speed;
-    if(keys["a"]) player.x -= player.speed;
-    if(keys["d"]) player.x += player.speed;
+    if(keys["w"]) player.y-=player.speed;
+    if(keys["s"]) player.y+=player.speed;
+    if(keys["a"]) player.x-=player.speed;
+    if(keys["d"]) player.x+=player.speed;
 
     if(mouse.down) shoot();
 
@@ -260,20 +225,20 @@ function update() {
     });
 
     enemies.forEach((e,i)=>{
-        let angle = Math.atan2(player.y-e.y, player.x-e.x);
-        e.x += Math.cos(angle)*e.speed;
-        e.y += Math.sin(angle)*e.speed;
+        let angle=Math.atan2(player.y-e.y,player.x-e.x);
+        e.x+=Math.cos(angle)*e.speed;
+        e.y+=Math.sin(angle)*e.speed;
 
-        // NEW: player collision
-        let dist = Math.hypot(player.x-e.x, player.y-e.y);
+        // PLAYER HIT
+        let dist=Math.hypot(player.x-e.x,player.y-e.y);
         if(dist < player.r + e.r){
-            gameRunning = false;
+            gameRunning=false;
             document.getElementById("gameOver").style.display="flex";
             document.getElementById("finalText").innerText="Score: "+score;
         }
 
         bullets.forEach((b,j)=>{
-            let d = Math.hypot(b.x-e.x,b.y-e.y);
+            let d=Math.hypot(b.x-e.x,b.y-e.y);
             if(d < e.r + b.r){
                 enemies.splice(i,1);
                 bullets.splice(j,1);
@@ -285,7 +250,7 @@ function update() {
 }
 
 /* DRAW */
-function draw() {
+function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
     ctx.fillStyle="lime";
@@ -309,9 +274,9 @@ function draw() {
 }
 
 /* LOOP */
-let spawnTimer = 0;
+let spawnTimer=0;
 
-function loop() {
+function loop(){
     update();
     draw();
 
@@ -330,13 +295,12 @@ function loop() {
 
 /* RESTART */
 function restart(){
-    bullets=[]; enemies=[]; score=0;
-    gameRunning=false; // NEW
     document.getElementById("gameOver").style.display="none";
-    document.getElementById("startScreen").style.display="flex"; // NEW
+    document.getElementById("startScreen").style.display="flex";
+    gameRunning=false;
 }
 
-/* START */
+/* START LOOP */
 loop();
 </script>
 
