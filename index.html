@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Shooter + Shop</title>
+<title>Working Shooter</title>
 <style>
 body { margin:0; overflow:hidden; background:#0b0b0b; }
 canvas { display:block; }
@@ -13,32 +13,26 @@ canvas { display:block; }
     left:10px;
     color:white;
     font-family:Arial;
-    z-index:5;
 }
 
-.screen {
+#startScreen, #gameOver {
     position:fixed;
-    top:0;
-    left:0;
-    width:100vw;
-    height:100vh;
+    top:0; left:0;
+    width:100vw; height:100vh;
     background:rgba(0,0,0,0.9);
     display:flex;
     justify-content:center;
     align-items:center;
     flex-direction:column;
     color:white;
-    z-index:9999;
 }
 
 #gameOver { display:none; }
-#shop { display:none; }
 
 button {
     padding:12px 24px;
-    font-size:18px;
-    margin:8px;
-    cursor:pointer;
+    font-size:20px;
+    margin-top:10px;
 }
 </style>
 </head>
@@ -46,14 +40,14 @@ button {
 <body>
 
 <canvas id="gameCanvas"></canvas>
-<div id="ui">Score: 0 | ❤️❤️❤️ | Coins: 0</div>
+<div id="ui">Score: 0</div>
 
-<div id="startScreen" class="screen">
+<div id="startScreen">
     <h1>Click Start</h1>
     <button onclick="startGame()">Start</button>
 </div>
 
-<div id="gameOver" class="screen">
+<div id="gameOver">
     <h1 id="finalText"></h1>
     <button onclick="restart()">Restart</button>
 </div>
@@ -71,14 +65,19 @@ window.addEventListener("resize", resize);
 
 /* GAME STATE */
 let player, bullets, enemies;
-let score, lives, spawnTimer;
+let score=0, lives=3;
 let gameRunning=false;
 
 /* INPUT */
 let keys={}, mouse={x:0,y:0,down:false};
+
 document.addEventListener("keydown",e=>keys[e.key]=true);
 document.addEventListener("keyup",e=>keys[e.key]=false);
-canvas.addEventListener("mousemove",e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
+
+canvas.addEventListener("mousemove",e=>{
+    mouse.x=e.clientX;
+    mouse.y=e.clientY;
+});
 canvas.addEventListener("mousedown",()=>mouse.down=true);
 canvas.addEventListener("mouseup",()=>mouse.down=false);
 
@@ -86,21 +85,14 @@ canvas.addEventListener("mouseup",()=>mouse.down=false);
 function startGame(){
     document.getElementById("startScreen").style.display="none";
 
-    player={
-        x:canvas.width/2,
-        y:canvas.height/2,
-        r:15,
-        speed:4
-    };
-
+    player={x:canvas.width/2,y:canvas.height/2,r:15,speed:4};
     bullets=[];
     enemies=[];
     score=0;
     lives=3;
-    spawnTimer=0;
 
-    // FORCE VISIBLE GAMEPLAY
-    for(let i=0;i<6;i++) spawnEnemy();
+    // FORCE enemies immediately
+    for(let i=0;i<5;i++) spawnEnemy();
 
     gameRunning=true;
 }
@@ -117,7 +109,7 @@ function shoot(){
     });
 }
 
-/* SPAWN FROM EDGES (IMPORTANT FIX) */
+/* SPAWN */
 function spawnEnemy(){
     let side=Math.floor(Math.random()*4);
     let x,y;
@@ -127,12 +119,7 @@ function spawnEnemy(){
     if(side===2){ x=Math.random()*canvas.width; y=0; }
     if(side===3){ x=Math.random()*canvas.width; y=canvas.height; }
 
-    enemies.push({
-        x,y,
-        r:15,
-        speed:1.5,
-        hp:2
-    });
+    enemies.push({x,y,r:15,speed:1.5,hp:2});
 }
 
 /* UPDATE */
@@ -147,8 +134,7 @@ function update(){
     if(mouse.down) shoot();
 
     bullets.forEach((b,i)=>{
-        b.x+=b.dx;
-        b.y+=b.dy;
+        b.x+=b.dx; b.y+=b.dy;
         if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height){
             bullets.splice(i,1);
         }
@@ -159,7 +145,6 @@ function update(){
         e.x+=Math.cos(a)*e.speed;
         e.y+=Math.sin(a)*e.speed;
 
-        // HIT PLAYER
         if(Math.hypot(player.x-e.x,player.y-e.y)<player.r+e.r){
             enemies.splice(i,1);
             lives--;
@@ -190,13 +175,11 @@ function draw(){
     ctx.fillStyle="#0b0b0b";
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    // PLAYER (more visible)
     ctx.fillStyle="lime";
     ctx.beginPath();
     ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
     ctx.fill();
 
-    // BULLETS
     ctx.fillStyle="yellow";
     bullets.forEach(b=>{
         ctx.beginPath();
@@ -204,7 +187,6 @@ function draw(){
         ctx.fill();
     });
 
-    // ENEMIES
     ctx.fillStyle="red";
     enemies.forEach(e=>{
         ctx.beginPath();
@@ -219,15 +201,8 @@ function loop(){
     draw();
 
     if(gameRunning){
-        spawnTimer++;
-        if(spawnTimer>40){
-            spawnEnemy();
-            spawnTimer=0;
-        }
-
-        let hearts="❤️".repeat(lives);
-        document.getElementById("ui").innerText=
-            "Score: "+score+" | "+hearts;
+        document.getElementById("ui").innerText =
+            "Score: "+score+" | ❤️".repeat(lives);
     }
 
     requestAnimationFrame(loop);
