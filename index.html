@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Shooter + Shop</title>
+<title>Shooter + Shop FIXED</title>
 <style>
 body { margin:0; overflow:hidden; background:#0b0b0b; }
 canvas { display:block; }
@@ -31,8 +31,7 @@ canvas { display:block; }
     z-index:9999;
 }
 
-#gameOver { display:none; }
-#shop { display:none; }
+#gameOver, #shop { display:none; }
 
 button {
     padding:12px 24px;
@@ -83,11 +82,16 @@ let coins = +localStorage.getItem("coins") || 0;
 let fireRate = +localStorage.getItem("fireRate") || 0;
 let speedUpgrade = +localStorage.getItem("speedUpgrade") || 0;
 
+function updateMenu(){
+    document.getElementById("highScoreText").innerText="High Score: "+highScore;
+    document.getElementById("totalPointsText").innerText="Total Points: "+totalPoints;
+    document.getElementById("coinText").innerText="Coins: "+coins;
+    document.getElementById("shopCoins").innerText="Coins: "+coins;
+}
 updateMenu();
 
-/* AUDIO (same as before) */
+/* AUDIO */
 let audioCtx, masterGain, audioStarted=false;
-
 function startAudio(){
     if(audioStarted) return;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -146,20 +150,27 @@ function startMusic(){
     },300);
 }
 
-/* GAME */
+/* GAME STATE */
 let player, bullets, enemies;
-let score, lives, gameRunning, spawnTimer;
+let score, lives, spawnTimer;
+let gameRunning=false;
 let lastShot=0;
 
-/* START */
+/* START GAME (FIXED) */
 function startGame(){
     document.getElementById("startScreen").style.display="none";
+
     startAudio();
 
+    // FULL RESET (this was the bug)
     player={x:canvas.width/2,y:canvas.height/2,r:15,speed:4+speedUpgrade};
-    bullets=[]; enemies=[];
-    score=0; lives=3;
+    bullets=[];
+    enemies=[];
+    score=0;
+    lives=3;
     spawnTimer=0;
+    lastShot=0;
+
     gameRunning=true;
 }
 
@@ -167,7 +178,6 @@ function startGame(){
 function openShop(){
     document.getElementById("startScreen").style.display="none";
     document.getElementById("shop").style.display="flex";
-    updateMenu();
 }
 function closeShop(){
     document.getElementById("shop").style.display="none";
@@ -200,14 +210,6 @@ function save(){
     localStorage.setItem("totalPoints",totalPoints);
 }
 
-/* UI */
-function updateMenu(){
-    document.getElementById("highScoreText").innerText="High Score: "+highScore;
-    document.getElementById("totalPointsText").innerText="Total Points: "+totalPoints;
-    document.getElementById("coinText").innerText="Coins: "+coins;
-    document.getElementById("shopCoins").innerText="Coins: "+coins;
-}
-
 /* INPUT */
 let keys={}, mouse={x:0,y:0,down:false};
 document.addEventListener("keydown",e=>keys[e.key]=true);
@@ -229,7 +231,13 @@ function shoot(){
 
 /* SPAWN */
 function spawnEnemy(){
-    enemies.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:15,speed:1+Math.random()*1.5,hp:2});
+    enemies.push({
+        x:Math.random()*canvas.width,
+        y:Math.random()*canvas.height,
+        r:15,
+        speed:1+Math.random()*1.5,
+        hp:2
+    });
 }
 
 /* UPDATE */
@@ -256,6 +264,7 @@ function update(){
         if(Math.hypot(player.x-e.x,player.y-e.y)<player.r+e.r){
             enemies.splice(i,1);
             lives--;
+
             if(lives<=0){
                 gameRunning=false;
 
@@ -320,7 +329,10 @@ function loop(){
 
     if(gameRunning){
         spawnTimer++;
-        if(spawnTimer>50){ spawnEnemy(); spawnTimer=0; }
+        if(spawnTimer>50){
+            spawnEnemy();
+            spawnTimer=0;
+        }
 
         let hearts=Array(lives).fill("❤️").join(" ");
         document.getElementById("ui").innerText=
