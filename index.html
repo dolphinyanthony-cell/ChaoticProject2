@@ -49,6 +49,7 @@ button {
 
 <div id="startScreen">
     <h1>Click Start</h1>
+    <h2 id="highScoreText">High Score: 0</h2>
     <button onclick="startGame()">Start</button>
 </div>
 
@@ -62,6 +63,10 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
+
+/* HIGH SCORE */
+let highScore = localStorage.getItem("shooterHighScore") || 0;
+document.getElementById("highScoreText").innerText = "High Score: " + highScore;
 
 /* AUDIO */
 let audioCtx, masterGain, audioStarted=false;
@@ -161,8 +166,8 @@ let keys={}, mouse={x:0,y:0,down:false};
 let player={x:canvas.width/2,y:canvas.height/2,r:15,speed:4};
 let bullets=[], enemies=[];
 let score=0;
-let lives=3;              // NEW
-let nextLifeScore=500;    // NEW
+let lives=3;
+let nextLifeScore=500;
 let gameRunning=false;
 
 /* INPUT */
@@ -185,8 +190,8 @@ function startGame(){
     bullets=[];
     enemies=[];
     score=0;
-    lives=3;               // NEW reset
-    nextLifeScore=500;     // NEW reset
+    lives=3;
+    nextLifeScore=500;
     spawnTimer=0;
 
     player.x = canvas.width/2;
@@ -244,16 +249,26 @@ function update(){
         e.x+=Math.cos(angle)*e.speed;
         e.y+=Math.sin(angle)*e.speed;
 
-        // PLAYER HIT
         let dist=Math.hypot(player.x-e.x,player.y-e.y);
         if(dist < player.r + e.r){
             enemies.splice(i,1);
-            lives--; // NEW
+            lives--;
 
             if(lives <= 0){
                 gameRunning=false;
+
+                // SAVE HIGH SCORE
+                if(score > highScore){
+                    highScore = score;
+                    localStorage.setItem("shooterHighScore", highScore);
+                }
+
+                document.getElementById("finalText").innerText =
+                    "Score: "+score+" | High Score: "+highScore;
+
                 document.getElementById("gameOver").style.display="flex";
-                document.getElementById("finalText").innerText="Score: "+score;
+                document.getElementById("highScoreText").innerText =
+                    "High Score: " + highScore;
             }
         }
 
@@ -268,7 +283,6 @@ function update(){
                     score+=10;
                     hitSound();
 
-                    // NEW: extra life system
                     if(score >= nextLifeScore){
                         lives++;
                         nextLifeScore += 500;
@@ -318,7 +332,7 @@ function loop(){
         }
 
         document.getElementById("ui").innerText =
-            "Score: "+score+" | Lives: "+lives; // UPDATED UI
+            "Score: "+score+" | Lives: "+lives;
     }
 
     requestAnimationFrame(loop);
