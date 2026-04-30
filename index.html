@@ -2,23 +2,39 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Shooter Improved Audio</title>
+<title>Shooter Final</title>
 <style>
 body { margin:0; overflow:hidden; background:#0b0b0b; }
 canvas { display:block; }
-#ui { position:absolute; top:10px; left:10px; color:white; font-family:Arial; }
-#gameOver {
+
+#ui {
+    position:absolute;
+    top:10px;
+    left:10px;
+    color:white;
+    font-family:Arial;
+}
+
+/* START + GAME OVER SCREEN */
+#overlay {
     position:absolute;
     width:100%;
     height:100%;
-    background:rgba(0,0,0,0.85);
-    display:none;
+    background:rgba(0,0,0,0.9);
+    display:flex;
     justify-content:center;
     align-items:center;
     flex-direction:column;
     color:white;
+    font-family:Arial;
 }
-button { padding:10px 20px; font-size:18px; }
+
+button {
+    padding:12px 24px;
+    font-size:20px;
+    margin-top:15px;
+    cursor:pointer;
+}
 </style>
 </head>
 
@@ -27,9 +43,9 @@ button { padding:10px 20px; font-size:18px; }
 <canvas id="gameCanvas"></canvas>
 <div id="ui">Score: 0</div>
 
-<div id="gameOver">
-    <h1 id="finalText"></h1>
-    <button onclick="restart()">Restart</button>
+<div id="overlay">
+    <h1 id="overlayText">Click Start</h1>
+    <button onclick="startGame()">Start</button>
 </div>
 
 <script>
@@ -42,11 +58,9 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 /* =========================
-   AUDIO ENGINE
+   AUDIO
 ========================= */
-let audioCtx;
-let masterGain;
-let audioStarted = false;
+let audioCtx, masterGain, audioStarted = false;
 
 function startAudio() {
     if (audioStarted) return;
@@ -60,33 +74,7 @@ function startAudio() {
     startMusic();
 }
 
-/* =========================
-   NOISE GENERATOR
-========================= */
-function createNoise(duration, volume) {
-    let buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
-    let data = buffer.getChannelData(0);
-
-    for (let i = 0; i < data.length; i++) {
-        data[i] = Math.random() * 2 - 1;
-    }
-
-    let source = audioCtx.createBufferSource();
-    source.buffer = buffer;
-
-    let gain = audioCtx.createGain();
-    gain.gain.value = volume;
-
-    source.connect(gain);
-    gain.connect(masterGain);
-
-    source.start();
-    source.stop(audioCtx.currentTime + duration);
-}
-
-/* =========================
-   OSC HELPER
-========================= */
+/* SOUND HELPERS */
 function playTone(freq, type, duration, volume, glide=false) {
     let osc = audioCtx.createOscillator();
     let gain = audioCtx.createGain();
@@ -104,104 +92,122 @@ function playTone(freq, type, duration, volume, glide=false) {
     gain.connect(masterGain);
 
     osc.start();
-
     gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
     osc.stop(audioCtx.currentTime + duration);
 }
 
-/* =========================
-   SOUND EFFECTS
-========================= */
+function createNoise(duration, volume) {
+    let buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
+    let data = buffer.getChannelData(0);
+
+    for (let i = 0; i < data.length; i++) {
+        data[i] = Math.random() * 2 - 1;
+    }
+
+    let source = audioCtx.createBufferSource();
+    let gain = audioCtx.createGain();
+
+    gain.gain.value = volume;
+
+    source.buffer = buffer;
+    source.connect(gain);
+    gain.connect(masterGain);
+
+    source.start();
+    source.stop(audioCtx.currentTime + duration);
+}
+
+/* SOUND EFFECTS */
 function shootSound() {
     if (!audioStarted) return;
-
-    // Quick noise burst (gun click/pop)
     createNoise(0.05, 0.2);
-
-    // Pitch drop tone (body of shot)
     playTone(600, "square", 0.08, 0.15, true);
 }
 
 function hitSound() {
     if (!audioStarted) return;
-
     createNoise(0.08, 0.25);
     playTone(120, "triangle", 0.15, 0.2, true);
 }
 
 /* =========================
-   MUSIC SYSTEM
+   MUSIC
 ========================= */
 let step = 0;
-
-// Smooth chord progression (sounds way nicer)
 const chords = [
-    [261.6, 329.6, 392.0], // C
-    [220.0, 261.6, 329.6], // Am
-    [196.0, 246.9, 329.6], // G
-    [174.6, 220.0, 261.6]  // F
+    [261.6,329.6,392],
+    [220,261.6,329.6],
+    [196,246.9,329.6],
+    [174.6,220,261.6]
 ];
 
 function startMusic() {
-    setInterval(() => {
+    setInterval(()=>{
         if (!gameRunning) return;
 
-        playMusicLayer();
+        let chord = chords[step % chords.length];
+
+        chord.forEach(freq=>{
+            playTone(freq,"sine",0.4,0.05);
+        });
+
+        if(step % 2 === 0){
+            playTone(chord[0]/2,"triangle",0.25,0.08);
+        }
+
+        if(Math.random()<0.5){
+            let note = chord[Math.floor(Math.random()*chord.length)]*2;
+            playTone(note,"sine",0.15,0.07);
+        }
+
         step++;
-
-    }, 300); // slower = less annoying
+    },300);
 }
 
 /* =========================
-   MUSIC LAYERS
-========================= */
-function playMusicLayer() {
-    let chord = chords[step % chords.length];
-
-    // Soft pad (background)
-    chord.forEach(freq => {
-        playTone(freq, "sine", 0.4, 0.05);
-    });
-
-    // Bass (not every beat)
-    if (step % 2 === 0) {
-        playTone(chord[0] / 2, "triangle", 0.25, 0.08);
-    }
-
-    // Melody (random but controlled)
-    if (Math.random() < 0.5) {
-        let note = chord[Math.floor(Math.random() * chord.length)] * 2;
-        playTone(note, "sine", 0.15, 0.07);
-    }
-}
-
-/* =========================
-   GAME
+   GAME VARIABLES
 ========================= */
 let keys = {};
-let mouse = { x:0, y:0, down:false };
+let mouse = {x:0,y:0,down:false};
 
-let player = { x:canvas.width/2, y:canvas.height/2, r:15, speed:4 };
+let player = {x:canvas.width/2,y:canvas.height/2,r:15,speed:4};
 let bullets = [];
 let enemies = [];
 let score = 0;
-let gameRunning = true;
+let gameRunning = false;
 
 /* INPUT */
-document.addEventListener("click", startAudio);
-document.addEventListener("keydown", e => keys[e.key]=true);
-document.addEventListener("keyup", e => keys[e.key]=false);
+document.addEventListener("keydown", e=>keys[e.key]=true);
+document.addEventListener("keyup", e=>keys[e.key]=false);
 
 canvas.addEventListener("mousemove", e=>{
-    mouse.x = e.clientX;
-    mouse.y = e.clientY;
+    mouse.x=e.clientX;
+    mouse.y=e.clientY;
 });
-canvas.addEventListener("mousedown", ()=> mouse.down=true);
-canvas.addEventListener("mouseup", ()=> mouse.down=false);
+canvas.addEventListener("mousedown", ()=>mouse.down=true);
+canvas.addEventListener("mouseup", ()=>mouse.down=false);
+
+/* START GAME */
+function startGame(){
+    document.getElementById("overlay").style.display="none";
+    resetGame();
+    startAudio();
+    gameRunning = true;
+    loop();
+}
+
+/* RESET */
+function resetGame(){
+    bullets=[];
+    enemies=[];
+    score=0;
+    player.x=canvas.width/2;
+    player.y=canvas.height/2;
+}
 
 /* SHOOT */
-function shoot() {
-    let angle = Math.atan2(mouse.y-player.y, mouse.x-player.x);
+function shoot(){
+    let angle=Math.atan2(mouse.y-player.y,mouse.x-player.x);
 
     bullets.push({
         x:player.x,
@@ -215,7 +221,7 @@ function shoot() {
 }
 
 /* SPAWN */
-function spawnEnemy() {
+function spawnEnemy(){
     enemies.push({
         x:Math.random()*canvas.width,
         y:Math.random()*canvas.height,
@@ -225,11 +231,11 @@ function spawnEnemy() {
 }
 
 /* UPDATE */
-function update() {
-    if(keys["w"]) player.y -= player.speed;
-    if(keys["s"]) player.y += player.speed;
-    if(keys["a"]) player.x -= player.speed;
-    if(keys["d"]) player.x += player.speed;
+function update(){
+    if(keys["w"]) player.y-=player.speed;
+    if(keys["s"]) player.y+=player.speed;
+    if(keys["a"]) player.x-=player.speed;
+    if(keys["d"]) player.x+=player.speed;
 
     if(mouse.down) shoot();
 
@@ -241,12 +247,18 @@ function update() {
     });
 
     enemies.forEach((e,i)=>{
-        let angle = Math.atan2(player.y-e.y, player.x-e.x);
-        e.x += Math.cos(angle)*e.speed;
-        e.y += Math.sin(angle)*e.speed;
+        let angle=Math.atan2(player.y-e.y,player.x-e.x);
+        e.x+=Math.cos(angle)*e.speed;
+        e.y+=Math.sin(angle)*e.speed;
+
+        // 💀 PLAYER COLLISION (NEW FIX)
+        let dist = Math.hypot(player.x - e.x, player.y - e.y);
+        if(dist < player.r + e.r){
+            gameOver();
+        }
 
         bullets.forEach((b,j)=>{
-            let d = Math.hypot(b.x-e.x,b.y-e.y);
+            let d=Math.hypot(b.x-e.x,b.y-e.y);
             if(d < e.r + b.r){
                 enemies.splice(i,1);
                 bullets.splice(j,1);
@@ -258,7 +270,7 @@ function update() {
 }
 
 /* DRAW */
-function draw() {
+function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
     ctx.fillStyle="lime";
@@ -282,9 +294,9 @@ function draw() {
 }
 
 /* LOOP */
-let spawnTimer = 0;
+let spawnTimer=0;
 
-function loop() {
+function loop(){
     if(!gameRunning) return;
 
     update();
@@ -301,16 +313,12 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-/* RESTART */
-function restart(){
-    bullets=[]; enemies=[]; score=0;
-    gameRunning=true;
-    document.getElementById("gameOver").style.display="none";
-    loop();
+/* GAME OVER */
+function gameOver(){
+    gameRunning=false;
+    document.getElementById("overlay").style.display="flex";
+    document.getElementById("overlayText").innerText="Game Over - Score: "+score;
 }
-
-/* START */
-loop();
 </script>
 
 </body>
