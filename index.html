@@ -50,19 +50,7 @@ button {
 
 <div id="startScreen" class="screen">
     <h1>Click Start</h1>
-    <h2 id="highScoreText"></h2>
-    <h3 id="totalPointsText"></h3>
-    <h3 id="coinText"></h3>
     <button onclick="startGame()">Start</button>
-    <button onclick="openShop()">Shop</button>
-</div>
-
-<div id="shop" class="screen">
-    <h1>Shop</h1>
-    <h3 id="shopCoins"></h3>
-    <button onclick="buyFireRate()">Faster Shooting (20 coins)</button>
-    <button onclick="buySpeed()">Faster Movement (20 coins)</button>
-    <button onclick="closeShop()">Back</button>
 </div>
 
 <div id="gameOver" class="screen">
@@ -73,149 +61,18 @@ button {
 <script>
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
 
-/* SAVE DATA */
-let highScore = +localStorage.getItem("highScore") || 0;
-let totalPoints = +localStorage.getItem("totalPoints") || 0;
-let coins = +localStorage.getItem("coins") || 0;
-let fireRate = +localStorage.getItem("fireRate") || 0;
-let speedUpgrade = +localStorage.getItem("speedUpgrade") || 0;
-
-updateMenu();
-
-/* AUDIO */
-let audioCtx, masterGain, audioStarted=false;
-
-function startAudio(){
-    if(audioStarted) return;
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    masterGain = audioCtx.createGain();
-    masterGain.gain.value = 0.4;
-    masterGain.connect(audioCtx.destination);
-    audioStarted = true;
-    startMusic();
+function resize(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 }
+resize();
+window.addEventListener("resize", resize);
 
-function createNoise(d,v){
-    let b=audioCtx.createBuffer(1,audioCtx.sampleRate*d,audioCtx.sampleRate);
-    let data=b.getChannelData(0);
-    for(let i=0;i<data.length;i++) data[i]=Math.random()*2-1;
-    let s=audioCtx.createBufferSource();
-    let g=audioCtx.createGain();
-    g.gain.value=v;
-    s.buffer=b;
-    s.connect(g);
-    g.connect(masterGain);
-    s.start();
-    s.stop(audioCtx.currentTime+d);
-}
-
-function playTone(f,t,d,v,g=false){
-    let o=audioCtx.createOscillator();
-    let ga=audioCtx.createGain();
-    o.type=t;
-    o.frequency.value=f;
-    if(g) o.frequency.exponentialRampToValueAtTime(f*0.6,audioCtx.currentTime+d);
-    ga.gain.value=v;
-    o.connect(ga);
-    ga.connect(masterGain);
-    o.start();
-    ga.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+d);
-    o.stop(audioCtx.currentTime+d);
-}
-
-function shootSound(){ if(audioStarted){ createNoise(0.05,0.2); playTone(600,"square",0.08,0.15,true);} }
-function hitSound(){ if(audioStarted){ createNoise(0.08,0.25); playTone(120,"triangle",0.15,0.2,true);} }
-
-/* MUSIC */
-let step=0;
-const chords=[[261,329,392],[220,261,329],[196,246,329],[174,220,261]];
-function startMusic(){
-    setInterval(()=>{
-        if(!gameRunning) return;
-        let c=chords[step%chords.length];
-        c.forEach(f=>playTone(f,"sine",0.4,0.05));
-        if(step%2===0) playTone(c[0]/2,"triangle",0.25,0.08);
-        if(Math.random()<0.5){
-            let n=c[Math.floor(Math.random()*c.length)]*2;
-            playTone(n,"sine",0.15,0.07);
-        }
-        step++;
-    },300);
-}
-
-/* GAME */
+/* GAME STATE */
 let player, bullets, enemies;
-let score, lives, gameRunning, spawnTimer;
-let lastShot=0;
-
-/* START */
-function startGame(){
-    document.getElementById("startScreen").style.display="none";
-    startAudio();
-
-    player={x:canvas.width/2,y:canvas.height/2,r:15,speed:4+speedUpgrade};
-    bullets=[]; enemies=[];
-    score=0; lives=3;
-    spawnTimer=0;
-
-    // ✅ ADDED FIXES
-    lastShot = 0;
-
-    // spawn enemies immediately so game doesn't look frozen
-    for(let i=0;i<5;i++){
-        spawnEnemy();
-    }
-
-    gameRunning=true;
-}
-
-/* SHOP */
-function openShop(){
-    document.getElementById("startScreen").style.display="none";
-    document.getElementById("shop").style.display="flex";
-    updateMenu();
-}
-function closeShop(){
-    document.getElementById("shop").style.display="none";
-    document.getElementById("startScreen").style.display="flex";
-}
-
-/* BUY */
-function buyFireRate(){
-    if(coins>=20){
-        coins-=20;
-        fireRate+=1;
-        save();
-        updateMenu();
-    }
-}
-function buySpeed(){
-    if(coins>=20){
-        coins-=20;
-        speedUpgrade+=0.5;
-        save();
-        updateMenu();
-    }
-}
-
-/* SAVE */
-function save(){
-    localStorage.setItem("coins",coins);
-    localStorage.setItem("fireRate",fireRate);
-    localStorage.setItem("speedUpgrade",speedUpgrade);
-    localStorage.setItem("totalPoints",totalPoints);
-}
-
-/* UI */
-function updateMenu(){
-    document.getElementById("highScoreText").innerText="High Score: "+highScore;
-    document.getElementById("totalPointsText").innerText="Total Points: "+totalPoints;
-    document.getElementById("coinText").innerText="Coins: "+coins;
-    document.getElementById("shopCoins").innerText="Coins: "+coins;
-}
+let score, lives, spawnTimer;
+let gameRunning=false;
 
 /* INPUT */
 let keys={}, mouse={x:0,y:0,down:false};
@@ -225,26 +82,57 @@ canvas.addEventListener("mousemove",e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
 canvas.addEventListener("mousedown",()=>mouse.down=true);
 canvas.addEventListener("mouseup",()=>mouse.down=false);
 
-/* SHOOT */
-function shoot(){
-    let now=Date.now();
+/* START */
+function startGame(){
+    document.getElementById("startScreen").style.display="none";
 
-    // ✅ improved responsiveness
-    if(now-lastShot < 120 - fireRate*15) return;
+    player={
+        x:canvas.width/2,
+        y:canvas.height/2,
+        r:15,
+        speed:4
+    };
 
-    // safety cap
-    if(120 - fireRate*15 < 20) return;
+    bullets=[];
+    enemies=[];
+    score=0;
+    lives=3;
+    spawnTimer=0;
 
-    lastShot=now;
+    // FORCE VISIBLE GAMEPLAY
+    for(let i=0;i<6;i++) spawnEnemy();
 
-    let a=Math.atan2(mouse.y-player.y,mouse.x-player.x);
-    bullets.push({x:player.x,y:player.y,dx:Math.cos(a)*10,dy:Math.sin(a)*10,r:4});
-    shootSound();
+    gameRunning=true;
 }
 
-/* SPAWN */
+/* SHOOT */
+function shoot(){
+    let a=Math.atan2(mouse.y-player.y,mouse.x-player.x);
+    bullets.push({
+        x:player.x,
+        y:player.y,
+        dx:Math.cos(a)*10,
+        dy:Math.sin(a)*10,
+        r:4
+    });
+}
+
+/* SPAWN FROM EDGES (IMPORTANT FIX) */
 function spawnEnemy(){
-    enemies.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:15,speed:1+Math.random()*1.5,hp:2});
+    let side=Math.floor(Math.random()*4);
+    let x,y;
+
+    if(side===0){ x=0; y=Math.random()*canvas.height; }
+    if(side===1){ x=canvas.width; y=Math.random()*canvas.height; }
+    if(side===2){ x=Math.random()*canvas.width; y=0; }
+    if(side===3){ x=Math.random()*canvas.width; y=canvas.height; }
+
+    enemies.push({
+        x,y,
+        r:15,
+        speed:1.5,
+        hp:2
+    });
 }
 
 /* UPDATE */
@@ -259,8 +147,11 @@ function update(){
     if(mouse.down) shoot();
 
     bullets.forEach((b,i)=>{
-        b.x+=b.dx; b.y+=b.dy;
-        if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height) bullets.splice(i,1);
+        b.x+=b.dx;
+        b.y+=b.dy;
+        if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height){
+            bullets.splice(i,1);
+        }
     });
 
     enemies.forEach((e,i)=>{
@@ -268,25 +159,15 @@ function update(){
         e.x+=Math.cos(a)*e.speed;
         e.y+=Math.sin(a)*e.speed;
 
+        // HIT PLAYER
         if(Math.hypot(player.x-e.x,player.y-e.y)<player.r+e.r){
             enemies.splice(i,1);
             lives--;
+
             if(lives<=0){
                 gameRunning=false;
-
-                totalPoints += score;
-                coins += Math.floor(score/1000)*10;
-
-                if(score>highScore){
-                    highScore=score;
-                    localStorage.setItem("highScore",highScore);
-                }
-
-                save();
-                updateMenu();
-
-                document.getElementById("finalText").innerText="Score: "+score;
                 document.getElementById("gameOver").style.display="flex";
+                document.getElementById("finalText").innerText="Score: "+score;
             }
         }
 
@@ -294,10 +175,10 @@ function update(){
             if(Math.hypot(b.x-e.x,b.y-e.y)<e.r+b.r){
                 e.hp--;
                 bullets.splice(j,1);
+
                 if(e.hp<=0){
                     enemies.splice(i,1);
                     score+=10;
-                    hitSound();
                 }
             }
         });
@@ -306,13 +187,16 @@ function update(){
 
 /* DRAW */
 function draw(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle="#0b0b0b";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
+    // PLAYER (more visible)
     ctx.fillStyle="lime";
     ctx.beginPath();
     ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
     ctx.fill();
 
+    // BULLETS
     ctx.fillStyle="yellow";
     bullets.forEach(b=>{
         ctx.beginPath();
@@ -320,6 +204,7 @@ function draw(){
         ctx.fill();
     });
 
+    // ENEMIES
     ctx.fillStyle="red";
     enemies.forEach(e=>{
         ctx.beginPath();
@@ -335,17 +220,19 @@ function loop(){
 
     if(gameRunning){
         spawnTimer++;
-        if(spawnTimer>50){ spawnEnemy(); spawnTimer=0; }
+        if(spawnTimer>40){
+            spawnEnemy();
+            spawnTimer=0;
+        }
 
-        let hearts=Array(lives).fill("❤️").join(" ");
+        let hearts="❤️".repeat(lives);
         document.getElementById("ui").innerText=
-            "Score: "+score+" | "+hearts+" | Coins: "+coins;
+            "Score: "+score+" | "+hearts;
     }
 
     requestAnimationFrame(loop);
 }
 
-/* RESTART */
 function restart(){
     document.getElementById("gameOver").style.display="none";
     document.getElementById("startScreen").style.display="flex";
