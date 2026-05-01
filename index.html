@@ -243,7 +243,7 @@ function buyCoinWithPoints(){
     if(totalPoints>=1000){ totalPoints-=1000; coins+=1; save(); updateMenu(); }
 }
 
-/* SHOOT - CONTINUOUS STREAM */
+/* SHOOT */
 function shoot(){
     let angle=Math.atan2(mouse.y-player.y, mouse.x-player.x);
 
@@ -265,11 +265,11 @@ function spawnEnemy(){
         y:Math.random()*canvas.height,
         r:15,
         speed:1+Math.random()*1.5,
-        hp:1 // ONE HIT
+        hp:1
     });
 }
 
-/* UPDATE */
+/* UPDATE (FIXED COLLISION) */
 function update(){
     if(!gameRunning) return;
 
@@ -279,7 +279,7 @@ function update(){
     if(keys["d"]) player.x+=player.speed;
 
     if(mouse.down){
-        for(let i=0;i<3;i++) shoot(); // makes it feel continuous
+        for(let i=0;i<3;i++) shoot();
     }
 
     bullets.forEach((b,i)=>{
@@ -304,16 +304,21 @@ function update(){
                 coins+=Math.floor(score/1000)*10;
                 if(score>highScore) highScore=score;
                 save(); updateMenu();
+
                 document.getElementById("finalText").innerText=
                     "Score: "+score+" | High Score: "+highScore;
+
                 document.getElementById("gameOver").style.display="flex";
             }
+            return;
         }
 
-        bullets.forEach((b,j)=>{
+        for(let j=bullets.length-1;j>=0;j--){
+            let b=bullets[j];
             if(Math.hypot(b.x-e.x,b.y-e.y)<e.r+b.r){
-                enemies.splice(i,1);
                 bullets.splice(j,1);
+                enemies.splice(i,1);
+
                 score+=10;
                 hitSound();
 
@@ -321,8 +326,9 @@ function update(){
                     lives++;
                     nextLifeScore+=500;
                 }
+                break;
             }
-        });
+        }
     });
 }
 
