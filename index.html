@@ -98,6 +98,102 @@ function updateMenu(){
 }
 updateMenu();
 
+/* AUDIO */
+let audioCtx, masterGain, audioStarted=false;
+
+function startAudio(){
+    if(audioStarted) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.4;
+    masterGain.connect(audioCtx.destination);
+    audioStarted = true;
+    startMusic();
+}
+
+function createNoise(duration, volume){
+    let buffer = audioCtx.createBuffer(1, audioCtx.sampleRate*duration, audioCtx.sampleRate);
+    let data = buffer.getChannelData(0);
+    for(let i=0;i<data.length;i++) data[i]=Math.random()*2-1;
+
+    let src = audioCtx.createBufferSource();
+    let gain = audioCtx.createGain();
+    gain.gain.value=volume;
+
+    src.buffer=buffer;
+    src.connect(gain);
+    gain.connect(masterGain);
+
+    src.start();
+    src.stop(audioCtx.currentTime+duration);
+}
+
+function playTone(freq,type,duration,volume,glide=false){
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+
+    osc.type=type;
+    osc.frequency.value=freq;
+
+    if(glide){
+        osc.frequency.exponentialRampToValueAtTime(freq*0.6, audioCtx.currentTime+duration);
+    }
+
+    gain.gain.value=volume;
+
+    osc.connect(gain);
+    gain.connect(masterGain);
+
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+duration);
+    osc.stop(audioCtx.currentTime+duration);
+}
+
+/* FIXED SOUND */
+function shootSound(){
+    if(!audioStarted) return;
+    createNoise(0.03,0.15);
+    playTone(700,"square",0.06,0.12,true);
+}
+
+function hitSound(){
+    if(!audioStarted) return;
+    createNoise(0.05,0.2);
+    playTone(100,"triangle",0.12,0.18,true);
+}
+
+/* MUSIC */
+let step=0;
+const chords=[
+    [261.6,329.6,392],
+    [220,261.6,329.6],
+    [196,246.9,329.6],
+    [174.6,220,261.6]
+];
+
+function startMusic(){
+    setInterval(()=>{
+        if(!gameRunning) return;
+
+        let chord = chords[step % chords.length];
+
+        chord.forEach(f=>{
+            playTone(f,"sine",0.35,0.04);
+        });
+
+        if(step % 2 === 0){
+            playTone(chord[0]/2,"triangle",0.2,0.07);
+        }
+
+        if(step % 3 === 0){
+            let note = chord[(step/3)%chord.length]*2;
+            playTone(note,"sine",0.12,0.06);
+        }
+
+        step++;
+    },300);
+}
+
 /* GAME */
 let keys={}, mouse={x:0,y:0,down:false};
 
@@ -120,6 +216,7 @@ canvas.addEventListener("mouseup",()=>mouse.down=false);
 /* START */
 function startGame(){
     document.getElementById("startScreen").style.display="none";
+    startAudio();
 
     bullets=[]; enemies=[];
     score=0; lives=3;
@@ -132,7 +229,6 @@ function startGame(){
 
     gameRunning=true;
 
-    // instant enemies so game feels alive
     for(let i=0;i<5;i++) spawnEnemy();
 }
 
@@ -177,6 +273,8 @@ function shoot(){
         dy:Math.sin(angle)*10,
         r:4
     });
+
+    shootSound();
 }
 
 /* SPAWN */
@@ -242,6 +340,7 @@ function update(){
                 if(e.hp<=0){
                     enemies.splice(i,1);
                     score+=10;
+                    hitSound();
 
                     if(score>=nextLifeScore){
                         lives++;
@@ -291,7 +390,7 @@ function loop(){
 
         let hearts = Array(lives).fill("❤️").join(" ");
         document.getElementById("ui").innerText =
-            "Score: "+score+" | "+hearts+" | Coins: "+coins;
+            "Score: " + score + " | " + hearts + " | Coins: " + coins;
     }
 
     requestAnimationFrame(loop);
