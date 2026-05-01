@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Shooter Full Game</title>
+<title>Shooter + Shop</title>
 <style>
 body { margin:0; overflow:hidden; background:#0b0b0b; }
 canvas { display:block; }
@@ -13,26 +13,32 @@ canvas { display:block; }
     left:10px;
     color:white;
     font-family:Arial;
+    z-index:5;
 }
 
 .screen {
     position:fixed;
-    top:0; left:0;
-    width:100vw; height:100vh;
+    top:0;
+    left:0;
+    width:100vw;
+    height:100vh;
     background:rgba(0,0,0,0.9);
     display:flex;
     justify-content:center;
     align-items:center;
     flex-direction:column;
     color:white;
+    z-index:9999;
 }
 
-#gameOver, #shop { display:none; }
+#gameOver { display:none; }
+#shop { display:none; }
 
 button {
     padding:12px 24px;
     font-size:18px;
     margin:8px;
+    cursor:pointer;
 }
 </style>
 </head>
@@ -100,35 +106,29 @@ updateMenu();
 
 /* GAME STATE */
 let player, bullets, enemies;
-let score, lives, gameRunning;
+let score, lives, gameRunning, spawnTimer;
 let lastShot=0;
 
 /* INPUT */
 let keys={}, mouse={x:0,y:0,down:false};
-
 document.addEventListener("keydown",e=>keys[e.key]=true);
 document.addEventListener("keyup",e=>keys[e.key]=false);
-
-canvas.addEventListener("mousemove",e=>{
-    mouse.x=e.clientX;
-    mouse.y=e.clientY;
-});
+canvas.addEventListener("mousemove",e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
 canvas.addEventListener("mousedown",()=>mouse.down=true);
 canvas.addEventListener("mouseup",()=>mouse.down=false);
 
 /* START */
-function startGame()// FORCE GAMEPLAY TO START (ADD THIS)
-for(let i = 0; i < 6; i++){
-    spawnEnemy();
-}{
+function startGame(){
     document.getElementById("startScreen").style.display="none";
 
     player={x:canvas.width/2,y:canvas.height/2,r:15,speed:4+speedUp};
     bullets=[]; enemies=[];
     score=0; lives=3;
+    spawnTimer=0;
+    lastShot=0;
 
-    // spawn instantly
-    for(let i=0;i<5;i++) spawnEnemy();
+    // 🔥 FORCE GAMEPLAY
+    for(let i=0;i<6;i++) spawnEnemy();
 
     gameRunning=true;
 }
@@ -163,31 +163,25 @@ function buyFireRate(){
 /* SHOOT */
 function shoot(){
     let now=Date.now();
-    if(now-lastShot < 120 - fireUp*10) return;
+
+    if(now-lastShot < 100 - fireUp*10) return;
+    if(100 - fireUp*10 < 20) return;
+
     lastShot=now;
 
     let a=Math.atan2(mouse.y-player.y,mouse.x-player.x);
     bullets.push({x:player.x,y:player.y,dx:Math.cos(a)*10,dy:Math.sin(a)*10,r:4});
 }
 
-/* SPAWN */
-function spawnEnemy()function spawnEnemy(){
-    let side = Math.floor(Math.random()*4);
+/* SPAWN (EDGE SPAWN FIX) */
+function spawnEnemy(){
+    let side=Math.floor(Math.random()*4);
     let x,y;
 
     if(side===0){ x=0; y=Math.random()*canvas.height; }
     if(side===1){ x=canvas.width; y=Math.random()*canvas.height; }
     if(side===2){ x=Math.random()*canvas.width; y=0; }
     if(side===3){ x=Math.random()*canvas.width; y=canvas.height; }
-
-    enemies.push({
-        x:x,
-        y:y,
-        r:15,
-        speed:1.5,
-        hp:2
-    });
-}
 
     enemies.push({x,y,r:15,speed:1.5,hp:2});
 }
@@ -201,7 +195,7 @@ function update(){
     if(keys["a"]) player.x-=player.speed;
     if(keys["d"]) player.x+=player.speed;
 
-    if(mouse.down) shoot()if(now - lastShot < 100 - fireUp*10) return;;
+    if(mouse.down) shoot();
 
     bullets.forEach((b,i)=>{
         b.x+=b.dx; b.y+=b.dy;
@@ -279,6 +273,12 @@ function loop(){
     draw();
 
     if(gameRunning){
+        spawnTimer++;
+        if(spawnTimer>40){
+            spawnEnemy();
+            spawnTimer=0;
+        }
+
         let hearts="❤️".repeat(lives);
         document.getElementById("ui").innerText=
             "Score: "+score+" | "+hearts+" | Coins: "+coins;
