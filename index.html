@@ -169,32 +169,17 @@ function hitSound(){
 
 /* MUSIC */
 let step=0;
-const chords=[
-    [261.6,329.6,392],
-    [220,261.6,329.6],
-    [196,246.9,329.6],
-    [174.6,220,261.6]
-];
-
+const chords=[[261,329,392],[220,261,329],[196,246,329],[174,220,261]];
 function startMusic(){
     setInterval(()=>{
         if(!gameRunning) return;
-
-        let chord = chords[step % chords.length];
-
-        chord.forEach(f=>{
-            playTone(f,"sine",0.35,0.04);
-        });
-
-        if(step % 2 === 0){
-            playTone(chord[0]/2,"triangle",0.2,0.07);
+        let c=chords[step%chords.length];
+        c.forEach(f=>playTone(f,"sine",0.35,0.04));
+        if(step%2===0) playTone(c[0]/2,"triangle",0.2,0.07);
+        if(step%3===0){
+            let n=c[(step/3)%c.length]*2;
+            playTone(n,"sine",0.12,0.06);
         }
-
-        if(step % 3 === 0){
-            let note = chord[(step/3)%chord.length]*2;
-            playTone(note,"sine",0.12,0.06);
-        }
-
         step++;
     },300);
 }
@@ -209,7 +194,6 @@ let lives=3;
 let nextLifeScore=500;
 let gameRunning=false;
 let spawnTimer=0;
-let lastShot=0;
 
 /* INPUT */
 document.addEventListener("keydown",e=>keys[e.key]=true);
@@ -250,39 +234,24 @@ function closeShop(){
 
 /* BUY */
 function buySpeed(){
-    if(coins>=20){
-        coins-=20;
-        speedUp+=0.5;
-        save(); updateMenu();
-    }
+    if(coins>=20){ coins-=20; speedUp+=0.5; save(); updateMenu(); }
 }
 function buyFireRate(){
-    if(coins>=20){
-        coins-=20;
-        fireUp+=1;
-        save(); updateMenu();
-    }
+    if(coins>=20){ coins-=20; fireUp+=1; save(); updateMenu(); }
 }
 function buyCoinWithPoints(){
-    if(totalPoints>=1000){
-        totalPoints-=1000;
-        coins+=1;
-        save(); updateMenu();
-    }
+    if(totalPoints>=1000){ totalPoints-=1000; coins+=1; save(); updateMenu(); }
 }
 
-/* SHOOT */
+/* SHOOT - CONTINUOUS STREAM */
 function shoot(){
-    let now=Date.now();
-    if(now-lastShot < 120 - fireUp*10) return;
-    lastShot=now;
-
     let angle=Math.atan2(mouse.y-player.y, mouse.x-player.x);
+
     bullets.push({
         x:player.x,
         y:player.y,
-        dx:Math.cos(angle)*10,
-        dy:Math.sin(angle)*10,
+        dx:Math.cos(angle)*12,
+        dy:Math.sin(angle)*12,
         r:4
     });
 
@@ -296,7 +265,7 @@ function spawnEnemy(){
         y:Math.random()*canvas.height,
         r:15,
         speed:1+Math.random()*1.5,
-        hp:2
+        hp:1 // ONE HIT
     });
 }
 
@@ -309,7 +278,9 @@ function update(){
     if(keys["a"]) player.x-=player.speed;
     if(keys["d"]) player.x+=player.speed;
 
-    if(mouse.down) shoot();
+    if(mouse.down){
+        for(let i=0;i<3;i++) shoot(); // makes it feel continuous
+    }
 
     bullets.forEach((b,i)=>{
         b.x+=b.dx; b.y+=b.dy;
@@ -319,9 +290,9 @@ function update(){
     });
 
     enemies.forEach((e,i)=>{
-        let angle=Math.atan2(player.y-e.y,player.x-e.x);
-        e.x+=Math.cos(angle)*e.speed;
-        e.y+=Math.sin(angle)*e.speed;
+        let a=Math.atan2(player.y-e.y,player.x-e.x);
+        e.x+=Math.cos(a)*e.speed;
+        e.y+=Math.sin(a)*e.speed;
 
         if(Math.hypot(player.x-e.x,player.y-e.y)<player.r+e.r){
             enemies.splice(i,1);
@@ -329,35 +300,26 @@ function update(){
 
             if(lives<=0){
                 gameRunning=false;
-
-                totalPoints += score;
-                coins += Math.floor(score/1000)*10;
-
+                totalPoints+=score;
+                coins+=Math.floor(score/1000)*10;
                 if(score>highScore) highScore=score;
-
                 save(); updateMenu();
-
-                document.getElementById("finalText").innerText =
+                document.getElementById("finalText").innerText=
                     "Score: "+score+" | High Score: "+highScore;
-
                 document.getElementById("gameOver").style.display="flex";
             }
         }
 
         bullets.forEach((b,j)=>{
             if(Math.hypot(b.x-e.x,b.y-e.y)<e.r+b.r){
-                e.hp--;
+                enemies.splice(i,1);
                 bullets.splice(j,1);
+                score+=10;
+                hitSound();
 
-                if(e.hp<=0){
-                    enemies.splice(i,1);
-                    score+=10;
-                    hitSound();
-
-                    if(score>=nextLifeScore){
-                        lives++;
-                        nextLifeScore+=500;
-                    }
+                if(score>=nextLifeScore){
+                    lives++;
+                    nextLifeScore+=500;
                 }
             }
         });
