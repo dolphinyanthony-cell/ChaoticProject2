@@ -118,17 +118,10 @@ canvas.addEventListener("mousedown",()=>mouse.down=true);
 canvas.addEventListener("mouseup",()=>mouse.down=false);
 
 /* START */
-function startGame()// make game visible instantly
+function startGame(// make game visible instantly
 for (let i = 0; i < 5; i++) {
     spawnEnemy();
-}{
-    document.getElementById("startScreen").style.display="none";
-
-    player={x:canvas.width/2,y:canvas.height/2,r:15,speed:4+speedUp};
-    bullets=[]; enemies=[];
-    score=0; lives=3;
-    spawnTimer=0;
-    lastShot=0;
+})
 
     // 🔥 FORCE GAMEPLAY
     for(let i=0;i<6;i++) spawnEnemy();
