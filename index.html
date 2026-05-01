@@ -2,35 +2,72 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Actual Game</title>
+<title>Shooter + Shop</title>
 <style>
 body { margin:0; overflow:hidden; background:#0b0b0b; }
 canvas { display:block; }
-#ui { position:absolute; top:10px; left:10px; color:white; font-family:Arial; }
-.screen {
-position:fixed; top:0; left:0; width:100vw; height:100vh;
-background:rgba(0,0,0,0.9);
-display:flex; justify-content:center; align-items:center; flex-direction:column;
-color:white;
+
+#ui {
+    position:absolute;
+    top:10px;
+    left:10px;
+    color:white;
+    font-family:Arial;
+    z-index:5;
 }
+
+.screen {
+    position:fixed;
+    top:0;
+    left:0;
+    width:100vw;
+    height:100vh;
+    background:rgba(0,0,0,0.9);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    flex-direction:column;
+    color:white;
+    z-index:9999;
+}
+
 #gameOver { display:none; }
-button { padding:12px 24px; font-size:18px; margin:8px; }
+#shop { display:none; }
+
+button {
+    padding:12px 24px;
+    font-size:18px;
+    margin:8px;
+    cursor:pointer;
+}
 </style>
 </head>
 
 <body>
 
 <canvas id="gameCanvas"></canvas>
-<div id="ui"></div>
+<div id="ui">Score: 0 | ❤️❤️❤️ | Coins: 0</div>
 
 <div id="startScreen" class="screen">
-<h1>ACTUAL GAME</h1>
-<button onclick="startGame()">Start</button>
+    <h1>Shooter</h1>
+    <h3 id="highScore"></h3>
+    <h3 id="totalPoints"></h3>
+    <h3 id="coinDisplay"></h3>
+    <button onclick="startGame()">Start</button>
+    <button onclick="openShop()">Shop</button>
+</div>
+
+<div id="shop" class="screen">
+    <h1>Shop</h1>
+    <h3 id="shopCoins"></h3>
+    <button onclick="buySpeed()">Speed + (20 coins)</button>
+    <button onclick="buyFireRate()">Fire Rate + (20 coins)</button>
+    <button onclick="closeShop()">Back</button>
 </div>
 
 <div id="gameOver" class="screen">
-<h1 id="finalText"></h1>
-<button onclick="restart()">Menu</button>
+    <h1 id="finalText"></h1>
+    <button onclick="restart()">Back to Menu</button>
 </div>
 
 <script>
@@ -38,15 +75,39 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 function resize(){
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 }
 resize();
 window.addEventListener("resize", resize);
 
+/* SAVE */
+let highScore = +localStorage.getItem("highScore") || 0;
+let totalPoints = +localStorage.getItem("totalPoints") || 0;
+let coins = +localStorage.getItem("coins") || 0;
+let speedUp = +localStorage.getItem("speedUp") || 0;
+let fireUp = +localStorage.getItem("fireUp") || 0;
+
+function save(){
+    localStorage.setItem("highScore", highScore);
+    localStorage.setItem("totalPoints", totalPoints);
+    localStorage.setItem("coins", coins);
+    localStorage.setItem("speedUp", speedUp);
+    localStorage.setItem("fireUp", fireUp);
+}
+
+function updateMenu(){
+    document.getElementById("highScore").innerText="High Score: "+highScore;
+    document.getElementById("totalPoints").innerText="Total Points: "+totalPoints;
+    document.getElementById("coinDisplay").innerText="Coins: "+coins;
+    document.getElementById("shopCoins").innerText="Coins: "+coins;
+}
+updateMenu();
+
+/* GAME STATE */
 let player, bullets, enemies;
-let score, lives, gameRunning, spawnRate;
-let lastShot = 0;
+let score, lives, gameRunning, spawnTimer;
+let lastShot=0;
 
 /* INPUT */
 let keys={}, mouse={x:0,y:0,down:false};
@@ -58,145 +119,179 @@ canvas.addEventListener("mouseup",()=>mouse.down=false);
 
 /* START */
 function startGame(){
-document.getElementById("startScreen").style.display="none";
+    document.getElementById("startScreen").style.display="none";
 
-player={x:canvas.width/2,y:canvas.height/2,r:15,speed:5};
-bullets=[]; enemies=[];
-score=0; lives=3;
-spawnRate=40;
+    player={x:canvas.width/2,y:canvas.height/2,r:15,speed:4+speedUp};
+    bullets=[]; enemies=[];
+    score=0; lives=3;
+    spawnTimer=0;
+    lastShot=0;
 
-// instant chaos
-for(let i=0;i<8;i++) spawnEnemy();
+    // 🔥 FORCE GAMEPLAY
+    for(let i=0;i<6;i++) spawnEnemy();
 
-gameRunning=true;
+    gameRunning=true;
+}
+
+/* SHOP */
+function openShop(){
+    document.getElementById("startScreen").style.display="none";
+    document.getElementById("shop").style.display="flex";
+    updateMenu();
+}
+function closeShop(){
+    document.getElementById("shop").style.display="none";
+    document.getElementById("startScreen").style.display="flex";
+}
+
+/* BUY */
+function buySpeed(){
+    if(coins>=20){
+        coins-=20;
+        speedUp+=0.5;
+        save(); updateMenu();
+    }
+}
+function buyFireRate(){
+    if(coins>=20){
+        coins-=20;
+        fireUp+=1;
+        save(); updateMenu();
+    }
 }
 
 /* SHOOT */
 function shoot(){
-let now=Date.now();
-if(now-lastShot < 100) return;
-lastShot=now;
+    let now=Date.now();
 
-let a=Math.atan2(mouse.y-player.y,mouse.x-player.x);
-bullets.push({x:player.x,y:player.y,dx:Math.cos(a)*12,dy:Math.sin(a)*12,r:4});
+    if(now-lastShot < 100 - fireUp*10) return;
+    if(100 - fireUp*10 < 20) return;
+
+    lastShot=now;
+
+    let a=Math.atan2(mouse.y-player.y,mouse.x-player.x);
+    bullets.push({x:player.x,y:player.y,dx:Math.cos(a)*10,dy:Math.sin(a)*10,r:4});
 }
 
-/* ENEMY SPAWN */
+/* SPAWN (EDGE SPAWN FIX) */
 function spawnEnemy(){
-let side=Math.floor(Math.random()*4);
-let x,y;
+    let side=Math.floor(Math.random()*4);
+    let x,y;
 
-if(side===0){ x=0; y=Math.random()*canvas.height; }
-if(side===1){ x=canvas.width; y=Math.random()*canvas.height; }
-if(side===2){ x=Math.random()*canvas.width; y=0; }
-if(side===3){ x=Math.random()*canvas.width; y=canvas.height; }
+    if(side===0){ x=0; y=Math.random()*canvas.height; }
+    if(side===1){ x=canvas.width; y=Math.random()*canvas.height; }
+    if(side===2){ x=Math.random()*canvas.width; y=0; }
+    if(side===3){ x=Math.random()*canvas.width; y=canvas.height; }
 
-enemies.push({
-x,y,
-r:15,
-speed:2 + Math.random()*1.5,
-hp:2
-});
+    enemies.push({x,y,r:15,speed:1.5,hp:2});
 }
 
 /* UPDATE */
 function update(){
-if(!gameRunning) return;
+    if(!gameRunning) return;
 
-if(keys["w"]) player.y-=player.speed;
-if(keys["s"]) player.y+=player.speed;
-if(keys["a"]) player.x-=player.speed;
-if(keys["d"]) player.x+=player.speed;
+    if(keys["w"]) player.y-=player.speed;
+    if(keys["s"]) player.y+=player.speed;
+    if(keys["a"]) player.x-=player.speed;
+    if(keys["d"]) player.x+=player.speed;
 
-if(mouse.down) shoot();
+    if(mouse.down) shoot();
 
-bullets.forEach((b,i)=>{
-b.x+=b.dx; b.y+=b.dy;
-if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height){
-bullets.splice(i,1);
-}
-});
+    bullets.forEach((b,i)=>{
+        b.x+=b.dx; b.y+=b.dy;
+        if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height){
+            bullets.splice(i,1);
+        }
+    });
 
-enemies.forEach((e,i)=>{
-let a=Math.atan2(player.y-e.y,player.x-e.x);
-e.x+=Math.cos(a)*e.speed;
-e.y+=Math.sin(a)*e.speed;
+    enemies.forEach((e,i)=>{
+        let a=Math.atan2(player.y-e.y,player.x-e.x);
+        e.x+=Math.cos(a)*e.speed;
+        e.y+=Math.sin(a)*e.speed;
 
-if(Math.hypot(player.x-e.x,player.y-e.y)<player.r+e.r){
-enemies.splice(i,1);
-lives--;
-if(lives<=0){
-gameRunning=false;
-document.getElementById("gameOver").style.display="flex";
-document.getElementById("finalText").innerText="Score: "+score;
-}
-}
+        if(Math.hypot(player.x-e.x,player.y-e.y)<player.r+e.r){
+            enemies.splice(i,1);
+            lives--;
 
-bullets.forEach((b,j)=>{
-if(Math.hypot(b.x-e.x,b.y-e.y)<e.r+b.r){
-e.hp--;
-bullets.splice(j,1);
-if(e.hp<=0){
-enemies.splice(i,1);
-score+=10;
-}
-}
-});
-});
+            if(lives<=0){
+                gameRunning=false;
+
+                totalPoints+=score;
+                coins+=Math.floor(score/1000)*10;
+
+                if(score>highScore) highScore=score;
+
+                save(); updateMenu();
+
+                document.getElementById("finalText").innerText="Score: "+score;
+                document.getElementById("gameOver").style.display="flex";
+            }
+        }
+
+        bullets.forEach((b,j)=>{
+            if(Math.hypot(b.x-e.x,b.y-e.y)<e.r+b.r){
+                e.hp--;
+                bullets.splice(j,1);
+
+                if(e.hp<=0){
+                    enemies.splice(i,1);
+                    score+=10;
+                }
+            }
+        });
+    });
 }
 
 /* DRAW */
 function draw(){
-ctx.fillStyle="#0b0b0b";
-ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle="#0b0b0b";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
-ctx.fillStyle="lime";
-ctx.beginPath();
-ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
-ctx.fill();
+    ctx.fillStyle="lime";
+    ctx.beginPath();
+    ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
+    ctx.fill();
 
-ctx.fillStyle="yellow";
-bullets.forEach(b=>{
-ctx.beginPath();
-ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
-ctx.fill();
-});
+    ctx.fillStyle="yellow";
+    bullets.forEach(b=>{
+        ctx.beginPath();
+        ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
+        ctx.fill();
+    });
 
-ctx.fillStyle="red";
-enemies.forEach(e=>{
-ctx.beginPath();
-ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
-ctx.fill();
-});
+    ctx.fillStyle="red";
+    enemies.forEach(e=>{
+        ctx.beginPath();
+        ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
+        ctx.fill();
+    });
 }
 
 /* LOOP */
-let timer=0;
 function loop(){
-update();
-draw();
+    update();
+    draw();
 
-if(gameRunning){
-timer++;
-if(timer>spawnRate){
-spawnEnemy();
-timer=0;
+    if(gameRunning){
+        spawnTimer++;
+        if(spawnTimer>40){
+            spawnEnemy();
+            spawnTimer=0;
+        }
 
-// difficulty ramps up
-if(spawnRate>15) spawnRate--;
+        let hearts="❤️".repeat(lives);
+        document.getElementById("ui").innerText=
+            "Score: "+score+" | "+hearts+" | Coins: "+coins;
+    }
+
+    requestAnimationFrame(loop);
 }
 
-document.getElementById("ui").innerText =
-"Score: "+score+" | ❤️".repeat(lives);
-}
-
-requestAnimationFrame(loop);
-}
-
+/* RESTART */
 function restart(){
-document.getElementById("gameOver").style.display="none";
-document.getElementById("startScreen").style.display="flex";
-gameRunning=false;
+    document.getElementById("gameOver").style.display="none";
+    document.getElementById("startScreen").style.display="flex";
+    gameRunning=false;
 }
 
 loop();
