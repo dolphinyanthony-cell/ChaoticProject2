@@ -59,8 +59,12 @@ button {
 <div id="shop">
     <h1>Shop</h1>
     <h3 id="shopCoins"></h3>
+    <h3 id="shopTotalPoints"></h3>
+
     <button onclick="buySpeed()">Speed + (20 coins)</button>
     <button onclick="buyFireRate()">Fire Rate + (20 coins)</button>
+    <button onclick="buyCoinWithPoints()">Buy 1 Coin (1000 Total Points)</button>
+
     <button onclick="closeShop()">Back</button>
 </div>
 
@@ -94,7 +98,9 @@ function updateMenu(){
     document.getElementById("highScoreText").innerText="High Score: "+highScore;
     document.getElementById("totalPointsText").innerText="Total Points: "+totalPoints;
     document.getElementById("coinText").innerText="Coins: "+coins;
+
     document.getElementById("shopCoins").innerText="Coins: "+coins;
+    document.getElementById("shopTotalPoints").innerText="Total Points: "+totalPoints;
 }
 updateMenu();
 
@@ -149,7 +155,6 @@ function playTone(freq,type,duration,volume,glide=false){
     osc.stop(audioCtx.currentTime+duration);
 }
 
-/* FIXED SOUND */
 function shootSound(){
     if(!audioStarted) return;
     createNoise(0.03,0.15);
@@ -255,6 +260,13 @@ function buyFireRate(){
     if(coins>=20){
         coins-=20;
         fireUp+=1;
+        save(); updateMenu();
+    }
+}
+function buyCoinWithPoints(){
+    if(totalPoints>=1000){
+        totalPoints-=1000;
+        coins+=1;
         save(); updateMenu();
     }
 }
